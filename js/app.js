@@ -1,87 +1,31 @@
-// Winston 时光机 - 公共脚本
-const DB_NAME = 'WinstonTimeMachine';
-const DB_VERSION = 1;
-let db;
+// Winston 时光机 - 线上版（Supabase）
+const SUPABASE_URL = 'https://dtnawyqxxqsdrywsdqfd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_HlUtreSb45P8JnZU6RgR-w_w827bkiX';
+const BUCKET_NAME = 'winston-media';
+
+let supabase;
 
 const defaultDays = [
-  { id: 'default-birthday', name: 'Winston 来的那天', date: '2018-05-12' },
-  { id: 'default-bridge', name: '他去彩虹桥那天', date: '2025-03-20' }
+  { name: 'Winston 来的那天', date: '2018-05-12' },
+  { name: '他去彩虹桥那天', date: '2025-03-20' }
 ];
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => resolve(req.result);
-    req.onupgradeneeded = (e) => {
-      const database = e.target.result;
-      if (!database.objectStoreNames.contains('media')) {
-        database.createObjectStore('media', { keyPath: 'id' });
-      }
-      if (!database.objectStoreNames.contains('metadata')) {
-        database.createObjectStore('metadata', { keyPath: 'id' });
-      }
-      if (!database.objectStoreNames.contains('comments')) {
-        const cStore = database.createObjectStore('comments', { keyPath: 'id', autoIncrement: true });
-        cStore.createIndex('mediaId', 'mediaId', { unique: false });
-      }
-      if (!database.objectStoreNames.contains('days')) {
-        database.createObjectStore('days', { keyPath: 'id' });
-      }
-    };
-  });
+function initDB() {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return ensureDefaultDays();
 }
 
-async function initDB() {
-  db = await openDB();
-  const existing = await getAll('days');
-  if (existing.length === 0) {
-    for (const d of defaultDays) await put('days', d);
+async function ensureDefaultDays() {
+  const { data, error } = await supabase.from('days').select('id').limit(1);
+  if (error) {
+    console.error('初始化纪念日失败', error);
+    return;
   }
-}
-
-function tx(store, mode = 'readonly') {
-  return db.transaction(store, mode).objectStore(store);
-}
-
-function put(store, data) {
-  return new Promise((resolve, reject) => {
-    const r = tx(store, 'readwrite').put(data);
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
-}
-
-function get(store, id) {
-  return new Promise((resolve, reject) => {
-    const r = tx(store).get(id);
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
-}
-
-function getAll(store) {
-  return new Promise((resolve, reject) => {
-    const r = tx(store).getAll();
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
-}
-
-function del(store, id) {
-  return new Promise((resolve, reject) => {
-    const r = tx(store, 'readwrite').delete(id);
-    r.onsuccess = () => resolve();
-    r.onerror = () => reject(r.error);
-  });
-}
-
-function getAllByIndex(store, indexName, value) {
-  return new Promise((resolve, reject) => {
-    const r = tx(store).index(indexName).getAll(value);
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
+  if (!data || data.length === 0) {
+    for (const d of defaultDays) {
+      await supabase.from('days').insert(d);
+    }
+  }
 }
 
 function escapeHtml(str) {
@@ -98,10 +42,6 @@ function formatDate(iso) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function blobFromMedia(media) {
-  return new Blob([media.data], { type: media.type });
-}
-
 function daysUntil(dateStr) {
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -112,26 +52,47 @@ function daysUntil(dateStr) {
   return Math.round((target - today) / (1000 * 60 * 60 * 24));
 }
 
-async function countComments(mediaId) {
-  const list = await getAllByIndex('comments', 'mediaId', mediaId);
-  return list.length;
+async function fetchMedia() {
+  const { data, error } = await supabase
+    .from('media')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchComments(mediaId) {
+  const { data, error } = await supabase
+    .from('comments')
+    .select('*')
+    .eq('media_id', mediaId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchDays() {
+  const { data, error } = await supabase
+    .from('days')
+    .select('*')
+    .order('date', { ascending: true });
+  if (error) throw error;
+  return data || [];
 }
 
 async function createPolaroidCard(meta) {
-  const media = await get('media', meta.id);
-  if (!media) return null;
-  const url = URL.createObjectURL(blobFromMedia(media));
-  const commentCount = await countComments(meta.id);
+  const comments = await fetchComments(meta.id);
 
   const card = document.createElement('div');
   card.className = 'polaroid';
-  card.onclick = () => openLightbox(meta, url);
+  card.dataset.mediaId = meta.id;
+  card.onclick = () => openLightbox(meta);
 
   let mediaHTML = '';
   if (meta.type === 'video') {
-    mediaHTML = `<div class="polaroid-video"><video src="${url}" muted preload="metadata"></video><span>▶</span></div>`;
+    mediaHTML = `<div class="polaroid-video"><video src="${meta.public_url}" muted preload="metadata"></video><span>▶</span></div>`;
   } else {
-    mediaHTML = `<img class="polaroid-media" src="${url}" alt="${escapeHtml(meta.caption || 'Winston 的回忆')}" loading="lazy" />`;
+    mediaHTML = `<img class="polaroid-media" src="${meta.public_url}" alt="${escapeHtml(meta.caption || 'Winston 的回忆')}" loading="lazy" />`;
   }
 
   card.innerHTML = `
@@ -139,17 +100,15 @@ async function createPolaroidCard(meta) {
     <div class="polaroid-caption">${escapeHtml(meta.caption) || '一个没写下什么的瞬间'}</div>
     <div class="polaroid-meta">
       <span>👤 ${escapeHtml(meta.uploader)} · ${meta.date}</span>
-      <span>💬 ${commentCount}</span>
+      <span>💬 ${comments.length}</span>
     </div>
   `;
   return card;
 }
 
-// 渲染照片墙（支持容器、过滤、空状态、限制数量）
 async function renderGallery(container, options = {}) {
-  const { filter = 'all', limit = null, emptyText = '还没有回忆' } = options;
-  let metas = await getAll('metadata');
-  metas.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const { filter = 'all', limit = null, emptyText = '这里还空着' } = options;
+  let metas = await fetchMedia();
   const filtered = metas.filter(m => filter === 'all' || m.type === filter);
   const displayMetas = limit ? filtered.slice(0, limit) : filtered;
 
@@ -172,11 +131,9 @@ async function renderGallery(container, options = {}) {
 
 // 灯箱
 let currentMeta = null;
-let currentUrl = null;
 
-function openLightbox(meta, url) {
+function openLightbox(meta) {
   currentMeta = meta;
-  currentUrl = url;
   const lightbox = document.getElementById('lightbox');
   const mediaWrap = document.getElementById('lightboxMedia');
   const caption = document.getElementById('lightboxCaption');
@@ -185,13 +142,13 @@ function openLightbox(meta, url) {
   mediaWrap.innerHTML = '';
   if (meta.type === 'video') {
     const v = document.createElement('video');
-    v.src = url;
+    v.src = meta.public_url;
     v.controls = true;
     v.autoplay = true;
     mediaWrap.appendChild(v);
   } else {
     const img = document.createElement('img');
-    img.src = url;
+    img.src = meta.public_url;
     img.alt = meta.caption || 'Winston 的回忆';
     mediaWrap.appendChild(img);
   }
@@ -208,23 +165,21 @@ function closeLightbox() {
   document.body.style.overflow = '';
   document.getElementById('lightboxMedia').innerHTML = '';
   currentMeta = null;
-  currentUrl = null;
 }
 
 async function renderComments(mediaId) {
-  const list = await getAllByIndex('comments', 'mediaId', mediaId);
-  list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const comments = await fetchComments(mediaId);
   const container = document.getElementById('commentsList');
   container.innerHTML = '';
-  if (list.length === 0) {
+  if (comments.length === 0) {
     container.innerHTML = '<div style="color:var(--ink-light);font-size:0.9rem;font-style:italic;">还没人说话，你要先开口吗？</div>';
     return;
   }
-  for (const c of list) {
+  for (const c of comments) {
     const div = document.createElement('div');
     div.className = 'comment';
     div.innerHTML = `
-      <div class="comment-author">${escapeHtml(c.author)} · ${formatDate(c.createdAt)}</div>
+      <div class="comment-author">${escapeHtml(c.author)} · ${formatDate(c.created_at)}</div>
       <div>${escapeHtml(c.text)}</div>
     `;
     container.appendChild(div);
@@ -238,27 +193,31 @@ async function submitComment() {
   const text = input.value.trim();
   if (!text) return;
   const author = (document.getElementById('uploaderName')?.value.trim()) || '某个想他的人';
-  await put('comments', {
-    mediaId: currentMeta.id,
+
+  const { error } = await supabase.from('comments').insert({
+    media_id: currentMeta.id,
     text,
-    author,
-    createdAt: new Date().toISOString()
+    author
   });
+  if (error) {
+    alert('评论发送失败：' + error.message);
+    return;
+  }
   input.value = '';
   await renderComments(currentMeta.id);
 }
 
 function downloadMedia(meta) {
   const a = document.createElement('a');
-  a.href = currentUrl;
-  a.download = meta.fileName || (meta.type === 'video' ? 'winston-video.mp4' : 'winston-photo.jpg');
+  a.href = meta.public_url;
+  a.download = meta.file_name || (meta.type === 'video' ? 'winston-video.mp4' : 'winston-photo.jpg');
   a.click();
 }
 
-// 纪念日渲染
+// 纪念日
 async function renderDays(container, options = {}) {
   const { limit = null } = options;
-  let days = await getAll('days');
+  let days = await fetchDays();
   days.sort((a, b) => daysUntil(a.date) - daysUntil(b.date));
   const displayDays = limit ? days.slice(0, limit) : days;
 
@@ -271,16 +230,18 @@ async function renderDays(container, options = {}) {
     const daysLeft = daysUntil(d.date);
     const div = document.createElement('div');
     div.className = 'day-item';
+    div.dataset.dayId = d.id;
     div.innerHTML = `
       <div class="day-name">${escapeHtml(d.name)}</div>
       <div class="day-date">${d.date}</div>
-      <div class="day-countdown">${daysLeft === 0 ? '就是今天 💐' : `还有 ${daysLeft} 天`}</div>
+      <div class="day-countdown">${daysLeft === 0 ? '今天' : `还有 ${daysLeft} 天`}</div>
     `;
     if (!limit) {
       div.addEventListener('dblclick', async () => {
         if (confirm('确定不要这个日子了吗？')) {
-          await del('days', d.id);
-          renderDays(container, options);
+          const { error } = await supabase.from('days').delete().eq('id', d.id);
+          if (error) alert('删除失败：' + error.message);
+          else renderDays(container, options);
         }
       });
     }
@@ -288,7 +249,43 @@ async function renderDays(container, options = {}) {
   }
 }
 
-// 页面初始化：绑定灯箱关闭事件
+// 实时订阅
+function subscribeToChanges() {
+  supabase
+    .channel('public:media')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'media' }, () => {
+      document.querySelectorAll('.gallery').forEach(g => {
+        if (g.id === 'gallery') renderGallery(g, { emptyText: '这里还空着，可以先去放一张照片' });
+        if (g.id === 'recentGallery') renderGallery(g, { limit: 6, emptyText: '还没有回忆，去上传第一张吧' });
+      });
+    })
+    .subscribe();
+
+  supabase
+    .channel('public:comments')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, (payload) => {
+      if (currentMeta && payload.new && payload.new.media_id === currentMeta.id) {
+        renderComments(currentMeta.id);
+      }
+      document.querySelectorAll('.gallery').forEach(g => {
+        if (g.id === 'gallery') renderGallery(g, { emptyText: '这里还空着，可以先去放一张照片' });
+        if (g.id === 'recentGallery') renderGallery(g, { limit: 6, emptyText: '还没有回忆，去上传第一张吧' });
+      });
+    })
+    .subscribe();
+
+  supabase
+    .channel('public:days')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'days' }, () => {
+      document.querySelectorAll('.days-list').forEach(d => {
+        if (d.id === 'daysList') renderDays(d);
+        if (d.id === 'upcomingDays') renderDays(d, { limit: 3 });
+      });
+    })
+    .subscribe();
+}
+
+// 页面初始化
 document.addEventListener('DOMContentLoaded', () => {
   const lightbox = document.getElementById('lightbox');
   if (lightbox) {
