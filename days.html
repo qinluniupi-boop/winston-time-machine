@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>纪念日 - Winston 的时光机</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header>
+    <h1 class="title"><a href="index.html">Winston 的时光机</a></h1>
+    <p class="subtitle">一些关于 Winston 的时间碎片</p>
+    <div class="paw-divider"></div>
+    <nav>
+      <ul class="nav-links">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="gallery.html">回忆长廊</a></li>
+        <li><a href="upload.html">上传回忆</a></li>
+        <li><a href="days.html" class="active">纪念日</a></li>
+        <li><a href="about.html">关于 Winston</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="memory-card">
+      <h2 class="section-title">要记住的日子</h2>
+      <p style="color: var(--ink-light); font-size: 0.9rem; margin-top: -0.5rem; margin-bottom: 1rem;">双击可以删掉某个日子</p>
+      <div id="daysList" class="days-list"></div>
+      <button class="btn-add" id="openDayModal">+ 再加一个日子</button>
+    </section>
+  </main>
+
+  <footer>
+    Winston 还在这里 · 原型版本
+  </footer>
+
+  <!-- 添加纪念日弹窗 -->
+  <div class="modal" id="dayModal">
+    <div class="modal-box">
+      <h3 class="modal-title">加一个日子</h3>
+      <div style="margin-bottom: 0.8rem;">
+        <label>是什么日子</label>
+        <input type="text" id="dayName" placeholder="比如 Winston 第一次学会握手" />
+      </div>
+      <div style="margin-bottom: 0.8rem;">
+        <label>哪一天</label>
+        <input type="date" id="dayDate" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="cancelDay">算了</button>
+        <button class="btn-primary" id="saveDay">记下</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (async function() {
+      try {
+        await initDB();
+        const daysList = document.getElementById('daysList');
+        await renderDays(daysList);
+
+        const dayModal = document.getElementById('dayModal');
+        const dayName = document.getElementById('dayName');
+        const dayDate = document.getElementById('dayDate');
+
+        document.getElementById('openDayModal').addEventListener('click', () => {
+          dayName.value = '';
+          dayDate.value = '';
+          dayModal.classList.add('open');
+        });
+        document.getElementById('cancelDay').addEventListener('click', () => dayModal.classList.remove('open'));
+        dayModal.addEventListener('click', (e) => { if (e.target === dayModal) dayModal.classList.remove('open'); });
+
+        document.getElementById('saveDay').addEventListener('click', async () => {
+          const name = dayName.value.trim();
+          const date = dayDate.value;
+          if (!name || !date) return;
+          await put('days', { id: 'd_' + Date.now(), name, date });
+          dayModal.classList.remove('open');
+          await renderDays(daysList);
+        });
+      } catch (err) {
+        console.error('纪念日页初始化失败', err);
+      }
+    })();
+  </script>
+</body>
+</html>
