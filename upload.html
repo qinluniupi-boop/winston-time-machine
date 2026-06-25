@@ -123,30 +123,39 @@
           const caption = memoryCaption.value.trim();
           const date = memoryDate.value || new Date().toISOString().slice(0, 10);
 
-          // 微信里部分文件 type 为空，按扩展名兜底
           const fileType = selectedFile.type || '';
           const isVideo = fileType.startsWith('video') || /\.(mp4|mov|m4v|avi|mkv)$/i.test(selectedFile.name);
-          const safeName = selectedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+          const safeName = selectedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_') || 'file';
 
           const mediaId = generateId();
-          const storagePath = `${mediaId}/${safeName || 'file'}`;
+          const storagePath = `${mediaId}/${safeName}`;
+          const contentType = fileType || (isVideo ? 'video/mp4' : 'image/jpeg');
 
           try {
-            // 1. 上传到 Storage
-            uploadProgress.textContent = '正在把文件放到仓库…';
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from(BUCKET_NAME)
-              .upload(storagePath, selectedFile, { contentType: fileType || (isVideo ? 'video/mp4' : 'image/jpeg') });
-            if (uploadError) throw uploadError;
+            // 1. 读取文件为 ArrayBuffer，兼容性最好
+            uploadProgress.textContent = '正在读取文件…';
+            const buffer = await selectedFile.arrayBuffer();
 
-            // 2. 获取公开 URL
-            uploadProgress.textContent = '正在记录这张照片…';
-            const { data: publicUrlData } = supabase.storage
-              .from(BUCKET_NAME)
-              .getPublicUrl(storagePath);
-            const publicUrl = publicUrlData.publicUrl;
+            // 2. 直接用 fetch 上传到 Storage，绕过 supabase-js storage 客户端
+            uploadProgress.textContent = '正在把文件放到仓库…';
+            const uploadResp = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${storagePath}`, {
+              method: 'POST',
+              headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': contentType,
+                'x-upsert': 'false'
+              },
+              body: new Blob([buffer], { type: contentType })
+            });
+            if (!uploadResp.ok) {
+              const errText = await uploadResp.text().catch(() => '');
+              throw new Error(`Storage 上传失败 (${uploadResp.status}): ${errText}`);
+            }
 
             // 3. 写入 media 表
+            uploadProgress.textContent = '正在记录这张照片…';
+            const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
             const { error: dbError } = await supabase.from('media').insert({
               id: mediaId,
               type: isVideo ? 'video' : 'image',
