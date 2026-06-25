@@ -60,10 +60,10 @@
     Winston 还在这里 · 原型版本
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.min.js"></script>
   <script src="js/app.js"></script>
   <script>
-    initDB().catch(err => console.error('关于页初始化失败', err));
+    initDB().catch(err => showInitError('关于页初始化失败：' + (err.message || err)));
   </script>
 </body>
 </html>
