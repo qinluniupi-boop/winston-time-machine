@@ -5,14 +5,42 @@ const BUCKET_NAME = 'winston-media';
 
 let supabase;
 
+// 微信内置浏览器等旧环境可能没有 crypto.randomUUID
+if (!window.crypto || !crypto.randomUUID) {
+  window.crypto = window.crypto || {};
+  crypto.randomUUID = function () {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+}
+
 const defaultDays = [
   { name: 'Winston 来的那天', date: '2018-05-12' },
   { name: '他去彩虹桥那天', date: '2025-03-20' }
 ];
 
-function initDB() {
+function showInitError(msg) {
+  console.error(msg);
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:2rem;background:rgba(245,240,227,0.96);z-index:20000;font-family:Georgia,serif;';
+  box.innerHTML = `<div style="max-width:400px;text-align:center;line-height:1.7;color:#3d3429;">
+    <div style="font-size:2rem;margin-bottom:1rem;">⚠️</div>
+    <h2 style="font-weight:400;margin:0 0 0.8rem;">页面没有正常启动</h2>
+    <p style="margin:0 0 1.2rem;color:#6b5e4f;">${msg}</p>
+    <p style="margin:0;font-size:0.85rem;color:#6b5e4f;">如果一直这样，可以试试用系统浏览器（Safari / Chrome）打开。</p>
+  </div>`;
+  document.body.appendChild(box);
+}
+
+async function initDB() {
+  if (!window.supabase || !window.supabase.createClient) {
+    throw new Error('Supabase 客户端没有加载，请检查网络后重试。');
+  }
   supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  return ensureDefaultDays();
+  await ensureDefaultDays();
 }
 
 async function ensureDefaultDays() {
