@@ -355,8 +355,9 @@ textarea { min-height: 100px; resize: vertical; }
 .drop-zone input[type="file"] {
   position: absolute;
   inset: 0;
-  opacity: 0;
+  opacity: 0.001;
   cursor: pointer;
+  font-size: 100px;
 }
 
 .file-hint {
