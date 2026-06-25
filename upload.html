@@ -57,6 +57,7 @@
     Winston 还在这里 · 原型版本
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/app.js"></script>
   <script>
     (async function() {
@@ -107,29 +108,50 @@
 
         uploadBtn.addEventListener('click', async () => {
           if (!selectedFile) return;
-          const name = uploaderName.value.trim() || '匿名家人';
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = '上传中...';
+
+          const name = uploaderName.value.trim() || '某个想他的人';
           const caption = memoryCaption.value.trim();
           const date = memoryDate.value || new Date().toISOString().slice(0, 10);
-          const id = 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+          const fileExt = selectedFile.name.split('.').pop();
+          const mediaId = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
+          const storagePath = `${mediaId}/${selectedFile.name}`;
 
-          const arrayBuffer = await selectedFile.arrayBuffer();
-          await put('media', {
-            id,
-            data: arrayBuffer,
-            type: selectedFile.type,
-            fileName: selectedFile.name
-          });
-          await put('metadata', {
-            id,
-            type: selectedFile.type.startsWith('video') ? 'video' : 'image',
-            caption,
-            uploader: name,
-            date,
-            createdAt: new Date().toISOString()
-          });
+          try {
+            // 1. 上传到 Storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from(BUCKET_NAME)
+              .upload(storagePath, selectedFile, { contentType: selectedFile.type });
+            if (uploadError) throw uploadError;
 
-          alert('这张照片已经留在这里了。');
-          window.location.href = 'gallery.html';
+            // 2. 获取公开 URL
+            const { data: publicUrlData } = supabase.storage
+              .from(BUCKET_NAME)
+              .getPublicUrl(storagePath);
+            const publicUrl = publicUrlData.publicUrl;
+
+            // 3. 写入 media 表
+            const { error: dbError } = await supabase.from('media').insert({
+              id: mediaId,
+              type: selectedFile.type.startsWith('video') ? 'video' : 'image',
+              caption,
+              uploader: name,
+              date,
+              storage_path: storagePath,
+              file_name: selectedFile.name,
+              public_url: publicUrl
+            });
+            if (dbError) throw dbError;
+
+            alert('这张照片已经留在这里了。');
+            window.location.href = 'gallery.html';
+          } catch (err) {
+            console.error('上传失败', err);
+            alert('上传失败：' + (err.message || err));
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = '放这里';
+          }
         });
       } catch (err) {
         console.error('上传页初始化失败', err);
