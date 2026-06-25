@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>关于 Winston - Winston 的时光机</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header>
+    <h1 class="title"><a href="index.html">Winston 的时光机</a></h1>
+    <p class="subtitle">一些关于 Winston 的时间碎片</p>
+    <div class="paw-divider"></div>
+    <nav>
+      <ul class="nav-links">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="gallery.html">回忆长廊</a></li>
+        <li><a href="upload.html">上传回忆</a></li>
+        <li><a href="days.html">纪念日</a></li>
+        <li><a href="about.html" class="active">关于 Winston</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="memory-card">
+      <h2 class="section-title">关于 Winston</h2>
+
+      <div class="about-photo-placeholder">🐕</div>
+
+      <article class="about-story">
+        <p>Winston 不是一只完美的小狗。他会把拖鞋藏起来，会在你打电话的时候突然大叫，会趁你不注意跳上沙发。</p>
+        <p>但他也知道，阳光最好的那个位置要留给打盹，门口响起钥匙声的时候要第一个跑过去，玩具要叼到喜欢的人面前。</p>
+        <p>现在他不在了。房间里安静了很多，狗粮碗还放在原来的地方。我们慢慢学会了，想念他不是一件需要完成的事，而是生活会突然冒出来的一个瞬间。</p>
+        <p>这个网站不是什么纪念碑，只是我们把他的碎片收拢起来的地方。一张他睡着的照片，一段他奔跑的视频，或者某天突然想起他的一句话。</p>
+      </article>
+
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-date">2018 年 5 月 12 日</div>
+          <div class="timeline-text">Winston 来了。从那天起，家里多了很多脚印和笑声。</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-date">2018 年 7 月</div>
+          <div class="timeline-text">他学会了握手。那天他吃了三块零食，得意了一下午。</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-date">2025 年 3 月 20 日</div>
+          <div class="timeline-text">Winston 离开了。我们说好了，不把他忘记。</div>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-top: 2rem;">
+        <a href="upload.html" class="btn-primary">放一张他的照片</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Winston 还在这里 · 原型版本
+  </footer>
+
+  <script src="js/app.js"></script>
+  <script>
+    initDB().catch(err => console.error('关于页初始化失败', err));
+  </script>
+</body>
+</html>
