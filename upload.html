@@ -51,6 +51,7 @@
         <div id="uploadProgress" style="display:none; margin-bottom:0.5rem; font-size:0.85rem; color:var(--ink-light);">准备上传…</div>
         <button class="btn-primary" id="uploadBtn" disabled>放这里</button>
       </div>
+      <div id="debugLog" style="display:none; margin-top:1rem; padding:0.8rem; background:#f9f5e9; border:1px dashed #c9a86c; border-radius:3px; font-size:0.8rem; color:#6b5e4f; line-height:1.5; font-family:monospace; white-space:pre-wrap;"></div>
     </section>
   </main>
 
@@ -112,12 +113,40 @@
           }
         });
 
+        const debugLog = document.getElementById('debugLog');
+        function log(msg) {
+          const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+          console.log(line);
+          debugLog.style.display = 'block';
+          debugLog.textContent += line + '\n';
+        }
+
+        function fetchWithTimeout(url, options, timeoutMs = 30000) {
+          if (typeof AbortController !== 'undefined') {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+          }
+          return Promise.race([
+            fetch(url, options),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`请求超时（${timeoutMs / 1000} 秒）`)), timeoutMs))
+          ]);
+        }
+
+        function readTextWithTimeout(response, timeoutMs = 5000) {
+          return Promise.race([
+            response.text(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('读取响应超时')), timeoutMs))
+          ]);
+        }
+
         uploadBtn.addEventListener('click', async () => {
           if (!selectedFile) return;
+          debugLog.textContent = '';
           uploadBtn.disabled = true;
           uploadBtn.textContent = '上传中…';
           uploadProgress.style.display = 'block';
-          uploadProgress.textContent = '正在上传，请稍候…';
+          uploadProgress.textContent = '准备上传…';
 
           const name = uploaderName.value.trim() || '某个想他的人';
           const caption = memoryCaption.value.trim();
@@ -131,14 +160,15 @@
           const storagePath = `${mediaId}/${safeName}`;
           const contentType = fileType || (isVideo ? 'video/mp4' : 'image/jpeg');
 
-          try {
-            // 1. 读取文件为 ArrayBuffer，兼容性最好
-            uploadProgress.textContent = '正在读取文件…';
-            const buffer = await selectedFile.arrayBuffer();
+          const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+          log(`文件: ${selectedFile.name}, 大小: ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB, 类型: ${contentType}`);
+          log(`网络: ${navigator.onLine ? '在线' : '离线'}, ${conn ? `effectiveType=${conn.effectiveType}, downlink=${conn.downlink}` : '未知'}`);
 
-            // 2. 直接用 fetch 上传到 Storage，绕过 supabase-js storage 客户端
+          try {
+            // 1. 直接用 fetch 上传到 Storage，body 用 File 对象本身
+            log('开始上传文件到 Storage…');
             uploadProgress.textContent = '正在把文件放到仓库…';
-            const uploadResp = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${storagePath}`, {
+            const uploadResp = await fetchWithTimeout(`${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${storagePath}`, {
               method: 'POST',
               headers: {
                 'apikey': SUPABASE_ANON_KEY,
@@ -146,34 +176,51 @@
                 'Content-Type': contentType,
                 'x-upsert': 'false'
               },
-              body: new Blob([buffer], { type: contentType })
-            });
+              body: selectedFile
+            }, 30000);
+            log(`Storage 响应状态: ${uploadResp.status}`);
             if (!uploadResp.ok) {
-              const errText = await uploadResp.text().catch(() => '');
+              const errText = await readTextWithTimeout(uploadResp).catch(() => '');
               throw new Error(`Storage 上传失败 (${uploadResp.status}): ${errText}`);
             }
 
-            // 3. 写入 media 表
+            // 2. 写入 media 表
+            log('写入 media 表…');
             uploadProgress.textContent = '正在记录这张照片…';
             const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
-            const { error: dbError } = await supabase.from('media').insert({
-              id: mediaId,
-              type: isVideo ? 'video' : 'image',
-              caption,
-              uploader: name,
-              date,
-              storage_path: storagePath,
-              file_name: selectedFile.name,
-              public_url: publicUrl
-            });
-            if (dbError) throw dbError;
+            const dbResp = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/media`, {
+              method: 'POST',
+              headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
+              },
+              body: JSON.stringify({
+                id: mediaId,
+                type: isVideo ? 'video' : 'image',
+                caption,
+                uploader: name,
+                date,
+                storage_path: storagePath,
+                file_name: selectedFile.name,
+                public_url: publicUrl
+              })
+            }, 15000);
+            log(`media 表响应状态: ${dbResp.status}`);
+            if (!dbResp.ok) {
+              const dbErrText = await readTextWithTimeout(dbResp).catch(() => '');
+              throw new Error(`media 表写入失败 (${dbResp.status}): ${dbErrText}`);
+            }
 
+            log('上传完成');
             uploadProgress.textContent = '完成';
             alert('这张照片已经留在这里了。');
             window.location.href = 'gallery.html';
           } catch (err) {
             console.error('上传失败', err);
             const detail = err && (err.error_description || err.message || err.statusText || err.status || JSON.stringify(err));
+            log(`错误: ${detail || '未知错误'}`);
             alert('上传没有成功：' + (detail || '未知错误，请检查网络后重试。'));
             uploadBtn.disabled = false;
             uploadBtn.textContent = '再试一次';
