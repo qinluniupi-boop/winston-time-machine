@@ -60,7 +60,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.min.js"></script>
   <script src="js/app.js"></script>
   <script>
     (async function() {
@@ -78,7 +78,7 @@
           });
         });
       } catch (err) {
-        console.error('画廊初始化失败', err);
+        showInitError('画廊初始化失败：' + (err.message || err));
       }
     })();
   </script>
