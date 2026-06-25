@@ -40,7 +40,7 @@
         <textarea id="memoryCaption" placeholder="那天发生了什么，你还记得吗？"></textarea>
       </div>
       <div class="drop-zone" id="dropZone">
-        <input type="file" id="fileInput" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime" />
+        <input type="file" id="fileInput" accept="image/*,video/*" />
         <div id="dropText">
           <div style="font-size: 1.5rem; margin-bottom: 0.3rem;">🖼️</div>
           <div>把照片或视频放进来</div>
@@ -94,9 +94,13 @@
         }
 
         fileInput.addEventListener('change', (e) => {
-          const files = e.target.files || (e.dataTransfer && e.dataTransfer.files);
+          log('change 事件触发');
+          const files = fileInput.files || (e && e.target && e.target.files) || (e && e.dataTransfer && e.dataTransfer.files);
+          log(`读取到 files: ${files ? files.length : 'null'}`);
           if (files && files[0]) {
             handleFileSelect(files[0]);
+          } else {
+            log('没有从 change 事件拿到文件');
           }
         });
 
