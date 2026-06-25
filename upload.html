@@ -48,6 +48,7 @@
         </div>
       </div>
       <div style="margin-top: 1rem; text-align: right;">
+        <div id="uploadProgress" style="display:none; margin-bottom:0.5rem; font-size:0.85rem; color:var(--ink-light);">准备上传…</div>
         <button class="btn-primary" id="uploadBtn" disabled>放这里</button>
       </div>
     </section>
@@ -68,6 +69,7 @@
         const dropZone = document.getElementById('dropZone');
         const dropText = document.getElementById('dropText');
         const uploadBtn = document.getElementById('uploadBtn');
+        const uploadProgress = document.getElementById('uploadProgress');
         const uploaderName = document.getElementById('uploaderName');
         const memoryDate = document.getElementById('memoryDate');
         const memoryCaption = document.getElementById('memoryCaption');
@@ -113,23 +115,32 @@
         uploadBtn.addEventListener('click', async () => {
           if (!selectedFile) return;
           uploadBtn.disabled = true;
-          uploadBtn.textContent = '上传中...';
+          uploadBtn.textContent = '上传中…';
+          uploadProgress.style.display = 'block';
+          uploadProgress.textContent = '正在上传，请稍候…';
 
           const name = uploaderName.value.trim() || '某个想他的人';
           const caption = memoryCaption.value.trim();
           const date = memoryDate.value || new Date().toISOString().slice(0, 10);
-          const fileExt = selectedFile.name.split('.').pop();
-          const mediaId = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
-          const storagePath = `${mediaId}/${selectedFile.name}`;
+
+          // 微信里部分文件 type 为空，按扩展名兜底
+          const fileType = selectedFile.type || '';
+          const isVideo = fileType.startsWith('video') || /\.(mp4|mov|m4v|avi|mkv)$/i.test(selectedFile.name);
+          const safeName = selectedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+
+          const mediaId = generateId();
+          const storagePath = `${mediaId}/${safeName || 'file'}`;
 
           try {
             // 1. 上传到 Storage
+            uploadProgress.textContent = '正在把文件放到仓库…';
             const { data: uploadData, error: uploadError } = await supabase.storage
               .from(BUCKET_NAME)
-              .upload(storagePath, selectedFile, { contentType: selectedFile.type });
+              .upload(storagePath, selectedFile, { contentType: fileType || (isVideo ? 'video/mp4' : 'image/jpeg') });
             if (uploadError) throw uploadError;
 
             // 2. 获取公开 URL
+            uploadProgress.textContent = '正在记录这张照片…';
             const { data: publicUrlData } = supabase.storage
               .from(BUCKET_NAME)
               .getPublicUrl(storagePath);
@@ -138,7 +149,7 @@
             // 3. 写入 media 表
             const { error: dbError } = await supabase.from('media').insert({
               id: mediaId,
-              type: selectedFile.type.startsWith('video') ? 'video' : 'image',
+              type: isVideo ? 'video' : 'image',
               caption,
               uploader: name,
               date,
@@ -148,13 +159,16 @@
             });
             if (dbError) throw dbError;
 
+            uploadProgress.textContent = '完成';
             alert('这张照片已经留在这里了。');
             window.location.href = 'gallery.html';
           } catch (err) {
             console.error('上传失败', err);
-            alert('上传失败：' + (err.message || err));
+            const detail = err && (err.error_description || err.message || err.statusText || err.status || JSON.stringify(err));
+            alert('上传没有成功：' + (detail || '未知错误，请检查网络后重试。'));
             uploadBtn.disabled = false;
-            uploadBtn.textContent = '放这里';
+            uploadBtn.textContent = '再试一次';
+            uploadProgress.style.display = 'none';
           }
         });
       } catch (err) {
