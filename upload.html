@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>上传回忆 - Winston 的时光机</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header>
+    <h1 class="title"><a href="index.html">Winston 的时光机</a></h1>
+    <p class="subtitle">一些关于 Winston 的时间碎片</p>
+    <div class="paw-divider"></div>
+    <nav>
+      <ul class="nav-links">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="gallery.html">回忆长廊</a></li>
+        <li><a href="upload.html" class="active">上传回忆</a></li>
+        <li><a href="days.html">纪念日</a></li>
+        <li><a href="about.html">关于 Winston</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="memory-card">
+      <h2 class="section-title">放一张 Winston 的照片</h2>
+      <div class="form-row">
+        <div>
+          <label for="uploaderName">你是谁</label>
+          <input type="text" id="uploaderName" placeholder="比如：妈妈" />
+        </div>
+        <div>
+          <label for="memoryDate">什么时候拍的</label>
+          <input type="date" id="memoryDate" />
+        </div>
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <label for="memoryCaption">关于这一刻</label>
+        <textarea id="memoryCaption" placeholder="那天发生了什么，你还记得吗？"></textarea>
+      </div>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept="image/*,video/*" />
+        <div id="dropText">
+          <div style="font-size: 1.5rem; margin-bottom: 0.3rem;">🖼️</div>
+          <div>把照片或视频放进来</div>
+          <div class="file-hint">支持 JPG、PNG、GIF、MP4、MOV 等格式</div>
+        </div>
+      </div>
+      <div style="margin-top: 1rem; text-align: right;">
+        <button class="btn-primary" id="uploadBtn" disabled>放这里</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Winston 还在这里 · 原型版本
+  </footer>
+
+  <script src="js/app.js"></script>
+  <script>
+    (async function() {
+      try {
+        await initDB();
+
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const dropText = document.getElementById('dropText');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploaderName = document.getElementById('uploaderName');
+        const memoryDate = document.getElementById('memoryDate');
+        const memoryCaption = document.getElementById('memoryCaption');
+
+        memoryDate.value = new Date().toISOString().slice(0, 10);
+        let selectedFile = null;
+
+        function formatFileName(file) {
+          const max = 20;
+          const name = file.name;
+          if (name.length <= max) return name;
+          return name.slice(0, 10) + '...' + name.slice(-7);
+        }
+
+        fileInput.addEventListener('change', (e) => {
+          if (e.target.files && e.target.files[0]) {
+            selectedFile = e.target.files[0];
+            dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">✅</div><div>已选择：${formatFileName(selectedFile)}</div><div class="file-hint">点击可重新选择</div>`;
+            uploadBtn.disabled = false;
+          }
+        });
+
+        ['dragenter', 'dragover'].forEach((evt) => {
+          dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        });
+        ['dragleave', 'drop'].forEach((evt) => {
+          dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+        });
+        dropZone.addEventListener('drop', (e) => {
+          const files = e.dataTransfer.files;
+          if (files && files[0]) {
+            fileInput.files = files;
+            selectedFile = files[0];
+            dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">✅</div><div>已选择：${formatFileName(selectedFile)}</div><div class="file-hint">点击可重新选择</div>`;
+            uploadBtn.disabled = false;
+          }
+        });
+
+        uploadBtn.addEventListener('click', async () => {
+          if (!selectedFile) return;
+          const name = uploaderName.value.trim() || '匿名家人';
+          const caption = memoryCaption.value.trim();
+          const date = memoryDate.value || new Date().toISOString().slice(0, 10);
+          const id = 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+
+          const arrayBuffer = await selectedFile.arrayBuffer();
+          await put('media', {
+            id,
+            data: arrayBuffer,
+            type: selectedFile.type,
+            fileName: selectedFile.name
+          });
+          await put('metadata', {
+            id,
+            type: selectedFile.type.startsWith('video') ? 'video' : 'image',
+            caption,
+            uploader: name,
+            date,
+            createdAt: new Date().toISOString()
+          });
+
+          alert('这张照片已经留在这里了。');
+          window.location.href = 'gallery.html';
+        });
+      } catch (err) {
+        console.error('上传页初始化失败', err);
+      }
+    })();
+  </script>
+</body>
+</html>
