@@ -5,16 +5,16 @@ const BUCKET_NAME = 'winston-media';
 
 let supabase;
 
-// 微信内置浏览器等旧环境可能没有 crypto.randomUUID
-if (!window.crypto || !crypto.randomUUID) {
-  window.crypto = window.crypto || {};
-  crypto.randomUUID = function () {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  };
+// 兼容微信内置浏览器等环境：不直接修改 window.crypto，提供一个稳定 ID 生成器
+function generateId() {
+  if (window.crypto && typeof crypto.randomUUID === 'function') {
+    try { return crypto.randomUUID(); } catch (e) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
 const defaultDays = [
