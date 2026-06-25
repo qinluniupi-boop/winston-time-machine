@@ -33,7 +33,7 @@
     </section>
 
     <div class="notice">
-      目前这是一个本地原型，回忆只存在这台设备的浏览器里。如果想让不同城市的人也能一起上传，下一步需要搭一个真正的 online 版本。
+      这里的数据会实时同步。把链接发给想一起纪念 Winston 的人，大家在不同的地方上传照片、写下评论，都会出现在这里。
     </div>
 
     <section class="memory-card">
@@ -73,7 +73,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.min.js"></script>
   <script src="js/app.js"></script>
   <script>
     (async function() {
@@ -83,7 +83,7 @@
         await renderGallery(document.getElementById('recentGallery'), { limit: 6, emptyText: '还没有回忆，去上传第一张吧' });
         await renderDays(document.getElementById('upcomingDays'), { limit: 3 });
       } catch (err) {
-        console.error('首页初始化失败', err);
+        showInitError('首页初始化失败：' + (err.message || err));
       }
     })();
   </script>
