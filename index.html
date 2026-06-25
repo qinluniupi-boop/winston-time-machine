@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Winston 的时光机</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header>
+    <h1 class="title"><a href="index.html">Winston 的时光机</a></h1>
+    <p class="subtitle">一些关于 Winston 的时间碎片</p>
+    <div class="paw-divider"></div>
+    <nav>
+      <ul class="nav-links">
+        <li><a href="index.html" class="active">首页</a></li>
+        <li><a href="gallery.html">回忆长廊</a></li>
+        <li><a href="upload.html">上传回忆</a></li>
+        <li><a href="days.html">纪念日</a></li>
+        <li><a href="about.html">关于 Winston</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h2>后来我们才知道，想念也是一种日常。</h2>
+      <p>Winston 走之后，日子还在继续。只是偶尔翻到一张照片，才会想起他曾经在某个下午，把整个房间都睡得很安静。这里放着他的碎片，也放着我们的。</p>
+      <div class="hero-actions">
+        <a href="upload.html" class="btn-primary">放一张他的照片</a>
+        <a href="gallery.html" class="btn-secondary">看看他</a>
+      </div>
+    </section>
+
+    <div class="notice">
+      目前这是一个本地原型，回忆只存在这台设备的浏览器里。如果想让不同城市的人也能一起上传，下一步需要搭一个真正的 online 版本。
+    </div>
+
+    <section class="memory-card">
+      <h2 class="section-title">最近被想起的 <a href="gallery.html">全部 →</a></h2>
+      <div id="recentGallery" class="gallery"></div>
+    </section>
+
+    <section class="memory-card">
+      <h2 class="section-title">一些要记住的日子 <a href="days.html">全部 →</a></h2>
+      <div id="upcomingDays" class="days-list"></div>
+    </section>
+  </main>
+
+  <footer>
+    Winston 还在这里 · 原型版本
+  </footer>
+
+  <!-- 灯箱 -->
+  <div class="lightbox" id="lightbox">
+    <button class="close-btn" id="closeLightbox">&times;</button>
+    <div class="lightbox-content">
+      <div class="lightbox-media-wrap" id="lightboxMedia"></div>
+      <div class="lightbox-info">
+        <div class="lightbox-header">
+          <p class="lightbox-caption" id="lightboxCaption"></p>
+          <p class="lightbox-meta" id="lightboxMeta"></p>
+        </div>
+        <div class="lightbox-actions">
+          <button class="btn-small" id="downloadBtn">⬇️ 保存原图</button>
+        </div>
+        <div class="comments" id="commentsList"></div>
+        <div class="comment-form">
+          <input type="text" id="commentInput" placeholder="你想对他说什么？" />
+          <button class="btn-small" id="commentSubmit">发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (async function() {
+      try {
+        await initDB();
+        await renderGallery(document.getElementById('recentGallery'), { limit: 6, emptyText: '还没有回忆，去上传第一张吧' });
+        await renderDays(document.getElementById('upcomingDays'), { limit: 3 });
+      } catch (err) {
+        console.error('首页初始化失败', err);
+      }
+    })();
+  </script>
+</body>
+</html>
