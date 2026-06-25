@@ -73,11 +73,13 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/app.js"></script>
   <script>
     (async function() {
       try {
         await initDB();
+        subscribeToChanges();
         await renderGallery(document.getElementById('recentGallery'), { limit: 6, emptyText: '还没有回忆，去上传第一张吧' });
         await renderDays(document.getElementById('upcomingDays'), { limit: 3 });
       } catch (err) {
