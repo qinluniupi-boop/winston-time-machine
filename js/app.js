@@ -3,7 +3,7 @@ const SUPABASE_URL = 'https://dtnawyqxxqsdrywsdqfd.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_HlUtreSb45P8JnZU6RgR-w_w827bkiX';
 const BUCKET_NAME = 'winston-media';
 
-let supabase;
+let client;
 
 // 兼容微信内置浏览器等环境：不直接修改 window.crypto，提供一个稳定 ID 生成器
 function generateId() {
@@ -39,19 +39,19 @@ async function initDB() {
   if (!window.supabase || !window.supabase.createClient) {
     throw new Error('Supabase 客户端没有加载，请检查网络后重试。');
   }
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   await ensureDefaultDays();
 }
 
 async function ensureDefaultDays() {
-  const { data, error } = await supabase.from('days').select('id').limit(1);
+  const { data, error } = await client.from('days').select('id').limit(1);
   if (error) {
     console.error('初始化纪念日失败', error);
     return;
   }
   if (!data || data.length === 0) {
     for (const d of defaultDays) {
-      await supabase.from('days').insert(d);
+      await client.from('days').insert(d);
     }
   }
 }
@@ -81,7 +81,7 @@ function daysUntil(dateStr) {
 }
 
 async function fetchMedia() {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('media')
     .select('*')
     .order('created_at', { ascending: false });
@@ -90,7 +90,7 @@ async function fetchMedia() {
 }
 
 async function fetchComments(mediaId) {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('comments')
     .select('*')
     .eq('media_id', mediaId)
@@ -100,7 +100,7 @@ async function fetchComments(mediaId) {
 }
 
 async function fetchDays() {
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('days')
     .select('*')
     .order('date', { ascending: true });
@@ -222,7 +222,7 @@ async function submitComment() {
   if (!text) return;
   const author = (document.getElementById('uploaderName')?.value.trim()) || '某个想他的人';
 
-  const { error } = await supabase.from('comments').insert({
+  const { error } = await client.from('comments').insert({
     media_id: currentMeta.id,
     text,
     author
@@ -267,7 +267,7 @@ async function renderDays(container, options = {}) {
     if (!limit) {
       div.addEventListener('dblclick', async () => {
         if (confirm('确定不要这个日子了吗？')) {
-          const { error } = await supabase.from('days').delete().eq('id', d.id);
+          const { error } = await client.from('days').delete().eq('id', d.id);
           if (error) alert('删除失败：' + error.message);
           else renderDays(container, options);
         }
@@ -279,7 +279,7 @@ async function renderDays(container, options = {}) {
 
 // 实时订阅
 function subscribeToChanges() {
-  supabase
+  client
     .channel('public:media')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'media' }, () => {
       document.querySelectorAll('.gallery').forEach(g => {
@@ -289,7 +289,7 @@ function subscribeToChanges() {
     })
     .subscribe();
 
-  supabase
+  client
     .channel('public:comments')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, (payload) => {
       if (currentMeta && payload.new && payload.new.media_id === currentMeta.id) {
@@ -302,7 +302,7 @@ function subscribeToChanges() {
     })
     .subscribe();
 
-  supabase
+  client
     .channel('public:days')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'days' }, () => {
       document.querySelectorAll('.days-list').forEach(d => {
