@@ -79,12 +79,18 @@
         document.getElementById('saveDay').addEventListener('click', async () => {
           const name = dayName.value.trim();
           const date = dayDate.value;
-          if (!name || !date) return;
+          console.log('保存纪念日:', { name, date });
+          if (!name || !date) {
+            alert('请填写完整的日期信息');
+            return;
+          }
           const { error } = await supabase.from('days').insert({ name, date });
           if (error) {
+            console.error('保存失败:', error);
             alert('保存失败：' + error.message);
             return;
           }
+          console.log('保存成功');
           dayModal.classList.remove('open');
           await renderDays(daysList);
         });
