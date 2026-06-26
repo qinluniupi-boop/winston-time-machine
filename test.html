@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supabase 连接测试</title>
+  <style>
+    body { font-family: Georgia, serif; padding: 2rem; background: #f5f0e3; color: #3d3429; }
+    .log { background: #fff; padding: 1rem; border: 1px solid #c9a86c; border-radius: 3px; margin: 1rem 0; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap; }
+    button { padding: 0.8rem 1.5rem; background: #8c6b4a; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 1rem; margin: 0.5rem; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>Supabase 连接测试</h1>
+  <p>这个页面测试 Supabase 后端是否能正常工作。</p>
+  
+  <div>
+    <button id="testBtn">开始测试</button>
+  </div>
+  
+  <div id="log" class="log">等待测试...</div>
+
+  <script src="js/supabase.min.js"></script>
+  <script>
+    const SUPABASE_URL = 'https://dtnawyqxxqsdrywsdqfd.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_HlUtreSb45P8JnZU6RgR-w_w827bkiX';
+    const BUCKET_NAME = 'winston-media';
+    
+    const log = document.getElementById('log');
+    const testBtn = document.getElementById('testBtn');
+    
+    function appendLog(msg) {
+      log.textContent += msg + '\n';
+      console.log(msg);
+    }
+    
+    testBtn.addEventListener('click', async () => {
+      testBtn.disabled = true;
+      log.textContent = '';
+      
+      try {
+        // 1. 检查 Supabase 客户端
+        appendLog('1. 检查 Supabase 客户端...');
+        if (!window.supabase || !window.supabase.createClient) {
+          throw new Error('Supabase 客户端未加载');
+        }
+        appendLog('   ✓ Supabase 客户端已加载');
+        
+        // 2. 创建客户端
+        appendLog('2. 创建 Supabase 客户端...');
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        appendLog('   ✓ 客户端创建成功');
+        
+        // 3. 测试 days 表查询
+        appendLog('3. 查询 days 表...');
+        const { data: days, error: daysError } = await supabase.from('days').select('*').limit(5);
+        if (daysError) throw new Error('days 查询失败: ' + daysError.message);
+        appendLog(`   ✓ 查询成功，找到 ${days.length} 条记录`);
+        days.forEach(d => appendLog(`     - ${d.name} (${d.date})`));
+        
+        // 4. 测试 days 表插入
+        appendLog('4. 插入测试纪念日...');
+        const testDay = { name: '测试纪念日 ' + new Date().toISOString(), date: '2026-06-25' };
+        const { error: insertError } = await supabase.from('days').insert(testDay);
+        if (insertError) throw new Error('days 插入失败: ' + insertError.message);
+        appendLog('   ✓ 插入成功');
+        
+        // 5. 删除测试数据
+        appendLog('5. 清理测试数据...');
+        const { error: deleteError } = await supabase.from('days').delete().eq('name', testDay.name);
+        if (deleteError) appendLog('   ⚠ 删除失败: ' + deleteError.message);
+        else appendLog('   ✓ 删除成功');
+        
+        // 6. 测试 media 表
+        appendLog('6. 查询 media 表...');
+        const { data: media, error: mediaError } = await supabase.from('media').select('*').limit(1);
+        if (mediaError) throw new Error('media 查询失败: ' + mediaError.message);
+        appendLog(`   ✓ media 表查询成功，找到 ${media.length} 条记录`);
+        
+        // 7. 测试 storage
+        appendLog('7. 测试 Storage 上传...');
+        const testFile = new Blob(['test'], { type: 'text/plain' });
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .upload(`test/${Date.now()}.txt`, testFile);
+        if (uploadError) throw new Error('Storage 上传失败: ' + uploadError.message);
+        appendLog('   ✓ Storage 上传成功');
+        
+        appendLog('\n=== 所有测试通过！Supabase 后端正常工作。===');
+      } catch (err) {
+        appendLog(`\n✗ 测试失败: ${err.message}`);
+        appendLog('请检查：');
+        appendLog('1. 网络连接是否正常');
+        appendLog('2. Supabase 项目是否正常运行');
+        appendLog('3. 匿名密钥是否正确');
+      } finally {
+        testBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
