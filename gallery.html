@@ -50,6 +50,7 @@
         </div>
         <div class="lightbox-actions">
           <button class="btn-small" id="downloadBtn">⬇️ 保存原图</button>
+          <button class="btn-small" id="deleteBtn" style="background: #c1121f; color: white;">🗑️ 删除</button>
         </div>
         <div class="comments" id="commentsList"></div>
         <div class="comment-form">
@@ -77,6 +78,19 @@
             await renderGallery(gallery, { filter: btn.dataset.filter, emptyText: '这个分类里还什么都没有' });
           });
         });
+
+        // 删除按钮
+        const deleteBtn = document.getElementById('deleteBtn');
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', async () => {
+            if (!currentMeta) return;
+            const success = await deleteMedia(currentMeta.id);
+            if (success) {
+              closeLightbox();
+              await renderGallery(gallery, { emptyText: '这里还空着，可以先去放一张照片' });
+            }
+          });
+        }
       } catch (err) {
         showInitError('画廊初始化失败：' + (err.message || err));
       }
