@@ -311,10 +311,15 @@
             if (editingDayId) {
               // 编辑模式
               const updateData = { name, date };
+              console.log('编辑模式, dayId:', editingDayId);
+              console.log('selectedDayMedia:', selectedDayMedia ? selectedDayMedia.name : 'null');
+              console.log('existingDayMedia:', existingDayMedia);
               
               // 处理媒体上传
               if (selectedDayMedia) {
+                console.log('开始上传新媒体...');
                 const mediaResult = await uploadDayMedia(selectedDayMedia, editingDayId);
+                console.log('上传结果:', mediaResult);
                 if (mediaResult) {
                   updateData.media_url = mediaResult.publicUrl;
                   updateData.media_type = mediaResult.type;
@@ -322,6 +327,7 @@
                 }
               } else if (removeDayMedia.style.display !== 'none' && existingDayMedia) {
                 // 用户点击了移除媒体
+                console.log('移除现有媒体...');
                 if (existingDayMedia.media_storage_path) {
                   await client.storage.from(BUCKET_NAME).remove([existingDayMedia.media_storage_path]);
                 }
@@ -330,7 +336,9 @@
                 updateData.media_storage_path = null;
               }
 
-              const { error } = await client.from('days').update(updateData).eq('id', editingDayId);
+              console.log('最终 updateData:', updateData);
+              const { data, error } = await client.from('days').update(updateData).eq('id', editingDayId);
+              console.log('更新结果:', { data, error });
               if (error) throw error;
             } else {
               // 新增模式
