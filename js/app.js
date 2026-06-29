@@ -303,6 +303,88 @@ async function renderDays(container, options = {}) {
   }
 }
 
+// 关于 Winston 内容管理
+async function loadAboutContent() {
+  const container = document.getElementById('aboutContent');
+  if (!container) return;
+
+  try {
+    const { data, error } = await client
+      .from('site_content')
+      .select('value')
+      .eq('key', 'about')
+      .single();
+
+    if (error) {
+      console.error('加载关于内容失败', error);
+      container.innerHTML = '<p style="color: var(--ink-light);">内容加载失败，请刷新重试。</p>';
+      return;
+    }
+
+    if (data && data.value) {
+      container.innerHTML = data.value;
+    } else {
+      container.innerHTML = '<p style="color: var(--ink-light);">还没有关于 Winston 的内容。</p>';
+    }
+  } catch (err) {
+    console.error('加载关于内容异常', err);
+    container.innerHTML = '<p style="color: var(--ink-light);">内容加载失败，请刷新重试。</p>';
+  }
+}
+
+async function saveAboutContent(content) {
+  const { error } = await client
+    .from('site_content')
+    .upsert({ key: 'about', value: content }, { onConflict: 'key' });
+
+  if (error) throw error;
+}
+
+// 删除媒体
+async function deleteMedia(mediaId) {
+  const password = prompt('请输入密码以确认删除：');
+  if (password !== 'winston') {
+    alert('密码错误');
+    return false;
+  }
+
+  try {
+    // 1. 获取媒体信息
+    const { data: media, error: fetchError } = await client
+      .from('media')
+      .select('*')
+      .eq('id', mediaId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // 2. 从 Storage 删除文件
+    if (media && media.storage_path) {
+      const { error: storageError } = await client.storage
+        .from(BUCKET_NAME)
+        .remove([media.storage_path]);
+
+      if (storageError) {
+        console.error('Storage 删除失败', storageError);
+      }
+    }
+
+    // 3. 从数据库删除记录
+    const { error: dbError } = await client
+      .from('media')
+      .delete()
+      .eq('id', mediaId);
+
+    if (dbError) throw dbError;
+
+    return true;
+  } catch (err) {
+    console.error('删除失败', err);
+    alert('删除失败：' + err.message);
+    return false;
+  }
+}
+
 // 实时订阅
 function subscribeToChanges() {
   client
