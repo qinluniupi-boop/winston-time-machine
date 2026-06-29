@@ -268,6 +268,65 @@ function downloadMedia(meta) {
   a.click();
 }
 
+// 纪念日媒体上传
+async function uploadDayMedia(file, dayId) {
+  try {
+    const fileType = file.type || '';
+    const isVideo = fileType.startsWith('video') || /\.(mp4|mov|m4v|avi|mkv)$/i.test(file.name);
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_') || 'file';
+    const mediaId = dayId || generateId();
+    const storagePath = `days/${mediaId}/${safeName}`;
+    const contentType = fileType || (isVideo ? 'video/mp4' : 'image/jpeg');
+
+    // 上传到 Storage
+    const uploadResp = await fetchWithTimeout(`${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${storagePath}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': contentType,
+        'x-upsert': 'true'
+      },
+      body: file
+    }, 30000);
+
+    if (!uploadResp.ok) {
+      const errText = await readTextWithTimeout(uploadResp).catch(() => '');
+      throw new Error(`Storage 上传失败 (${uploadResp.status}): ${errText}`);
+    }
+
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
+    return {
+      publicUrl,
+      type: isVideo ? 'video' : 'image',
+      storagePath
+    };
+  } catch (err) {
+    console.error('纪念日媒体上传失败', err);
+    alert('媒体上传失败：' + err.message);
+    return null;
+  }
+}
+
+function fetchWithTimeout(url, options, timeoutMs = 30000) {
+  if (typeof AbortController !== 'undefined') {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+  }
+  return Promise.race([
+    fetch(url, options),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`请求超时（${timeoutMs / 1000} 秒）`)), timeoutMs))
+  ]);
+}
+
+function readTextWithTimeout(response, timeoutMs = 5000) {
+  return Promise.race([
+    response.text(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('读取响应超时')), timeoutMs))
+  ]);
+}
+
 // 纪念日
 async function renderDays(container, options = {}) {
   const { limit = null } = options;
@@ -277,28 +336,78 @@ async function renderDays(container, options = {}) {
 
   container.innerHTML = '';
   if (displayDays.length === 0) {
-    container.innerHTML = '<div style="color:var(--ink-light);font-size:0.9rem;">还没有要记住的日子</div>';
+    container.innerHTML = '<div style="color:var(--ink-light);font-size:0.9rem;grid-column:1/-1;">还没有要记住的日子</div>';
     return;
   }
   for (const d of displayDays) {
     const countdownText = formatDayCountdown(d.date);
     const div = document.createElement('div');
-    div.className = 'day-item';
+    div.className = 'day-card';
     div.dataset.dayId = d.id;
+
+    // 媒体区域
+    let mediaHTML = '';
+    if (d.media_url) {
+      if (d.media_type === 'video') {
+        mediaHTML = `<div class="day-media"><video src="${d.media_url}" muted preload="metadata" controls></video></div>`;
+      } else {
+        mediaHTML = `<div class="day-media"><img src="${d.media_url}" alt="${escapeHtml(d.name)}" loading="lazy" /></div>`;
+      }
+    } else {
+      mediaHTML = `<div class="day-media"><div class="day-media-placeholder"><span>📷</span><span>暂无照片</span></div></div>`;
+    }
+
     div.innerHTML = `
-      <div class="day-name">${escapeHtml(d.name)}</div>
-      <div class="day-date">${d.date}</div>
-      <div class="day-countdown">${countdownText}</div>
+      ${mediaHTML}
+      <div class="day-info">
+        <div class="day-name">${escapeHtml(d.name)}</div>
+        <div class="day-date">${d.date}</div>
+        <div class="day-countdown">${countdownText}</div>
+      </div>
+      ${!limit ? `
+        <div class="day-actions">
+          <button class="day-edit-btn" data-day-id="${d.id}">✏️ 编辑</button>
+          <button class="day-delete-btn" data-day-id="${d.id}">🗑️ 删除</button>
+        </div>
+      ` : ''}
     `;
-    if (!limit) {
-      div.addEventListener('dblclick', async () => {
-        if (confirm('确定不要这个日子了吗？')) {
-          const { error } = await client.from('days').delete().eq('id', d.id);
-          if (error) alert('删除失败：' + error.message);
-          else renderDays(container, options);
+
+    // 编辑按钮
+    const editBtn = div.querySelector('.day-edit-btn');
+    if (editBtn) {
+      editBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (window.openEditDayModal) {
+          await window.openEditDayModal(d);
         }
       });
     }
+
+    // 删除按钮
+    const deleteBtn = div.querySelector('.day-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const password = prompt('请输入密码以确认删除：');
+        if (password !== 'winston') {
+          if (password !== null) alert('密码错误');
+          return;
+        }
+        
+        // 删除媒体文件
+        if (d.media_storage_path) {
+          await client.storage.from(BUCKET_NAME).remove([d.media_storage_path]).catch(() => {});
+        }
+        
+        const { error } = await client.from('days').delete().eq('id', d.id);
+        if (error) {
+          alert('删除失败：' + error.message);
+        } else {
+          await renderDays(container, options);
+        }
+      });
+    }
+
     container.appendChild(div);
   }
 }
