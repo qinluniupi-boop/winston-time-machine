@@ -345,7 +345,7 @@ async function renderDays(container, options = {}) {
     div.className = 'day-card';
     div.dataset.dayId = d.id;
 
-    // 媒体区域
+    // 媒体区域（只在有媒体时显示）
     let mediaHTML = '';
     if (d.media_url) {
       if (d.media_type === 'video') {
@@ -353,8 +353,6 @@ async function renderDays(container, options = {}) {
       } else {
         mediaHTML = `<div class="day-media"><img src="${d.media_url}" alt="${escapeHtml(d.name)}" loading="lazy" /></div>`;
       }
-    } else {
-      mediaHTML = `<div class="day-media"><div class="day-media-placeholder"><span>📷</span><span>暂无照片</span></div></div>`;
     }
 
     div.innerHTML = `
