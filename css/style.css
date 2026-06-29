@@ -35,6 +35,8 @@ body::before {
 
 /* 顶部标题与导航 */
 header {
+  position: relative;
+  z-index: 1;
   text-align: center;
   padding: 2.5rem 1rem 1.5rem;
   background:
@@ -117,6 +119,8 @@ nav {
 
 /* 主体容器 */
 .container {
+  position: relative;
+  z-index: 1;
   max-width: 1100px;
   margin: 0 auto;
   padding: 2rem 1rem 4rem;
@@ -838,6 +842,8 @@ textarea { min-height: 100px; resize: vertical; }
 
 /* 底部 */
 footer {
+  position: relative;
+  z-index: 1;
   text-align: center;
   padding: 2rem 1rem;
   color: var(--ink-light);
@@ -850,3 +856,28 @@ footer {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--sepia); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--sepia-dark); }
+
+/* ===== 背景照片装饰 ===== */
+.bg-photos-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.bg-photo {
+  position: absolute;
+  border-radius: 6px;
+  object-fit: cover;
+  opacity: 0.045;
+  filter: blur(1.5px) sepia(0.25);
+  box-shadow: 0 8px 32px rgba(61, 52, 41, 0.08);
+  animation: bg-float ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes bg-float {
+  0% { transform: translate(0, 0) rotate(var(--rot, 0deg)); }
+  100% { transform: translate(var(--dx, 10px), var(--dy, -14px)) rotate(calc(var(--rot, 0deg) + 2deg)); }
+}
