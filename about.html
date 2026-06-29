@@ -136,11 +136,22 @@
         const cancelEdit = document.getElementById('cancelEdit');
         const saveAbout = document.getElementById('saveAbout');
 
-        editBtn.addEventListener('click', () => {
+        editBtn.addEventListener('click', async () => {
           const password = prompt('请输入编辑密码：');
           if (password === 'winston') {
-            aboutEditor.value = document.getElementById('aboutContent').innerHTML;
-            editModal.classList.add('open');
+            // 从数据库获取纯文本内容
+            try {
+              const { data } = await client
+                .from('site_content')
+                .select('value')
+                .eq('key', 'about')
+                .single();
+              
+              aboutEditor.value = data && data.value ? data.value : '';
+              editModal.classList.add('open');
+            } catch (err) {
+              alert('加载内容失败：' + err.message);
+            }
           } else if (password !== null) {
             alert('密码错误');
           }
