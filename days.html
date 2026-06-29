@@ -233,11 +233,13 @@
         let editingDayId = null;
         let selectedDayMedia = null;
         let existingDayMedia = null;
+        let mediaRemoved = false;
 
         function resetModal() {
           editingDayId = null;
           selectedDayMedia = null;
           existingDayMedia = null;
+          mediaRemoved = false;
           dayModalTitle.textContent = '加一个日子';
           dayName.value = '';
           dayDate.value = '';
@@ -252,6 +254,7 @@
           if (!file) return;
           selectedDayMedia = file;
           existingDayMedia = null;
+          mediaRemoved = false;
           dayMediaUploadText.innerHTML = `<div style="font-size:1.2rem;">✅</div><div>已选择：${file.name}</div>`;
           
           const preview = document.createElement(file.type.startsWith('video') ? 'video' : 'img');
@@ -273,6 +276,7 @@
         removeDayMedia.addEventListener('click', () => {
           selectedDayMedia = null;
           existingDayMedia = null;
+          mediaRemoved = true;
           dayMediaInput.value = '';
           dayMediaUploadText.innerHTML = '<div style="font-size: 1.5rem;">📷</div><div>点击选择照片或视频</div>';
           dayMediaPreview.style.display = 'none';
@@ -325,8 +329,8 @@
                   updateData.media_type = mediaResult.type;
                   updateData.media_storage_path = mediaResult.storagePath;
                 }
-              } else if (removeDayMedia.style.display !== 'none' && existingDayMedia) {
-                // 用户点击了移除媒体
+              } else if (mediaRemoved && existingDayMedia) {
+                // 用户明确点击了移除媒体
                 console.log('移除现有媒体...');
                 if (existingDayMedia.media_storage_path) {
                   await client.storage.from(BUCKET_NAME).remove([existingDayMedia.media_storage_path]);
