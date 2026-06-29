@@ -544,8 +544,36 @@ function subscribeToChanges() {
     .subscribe();
 }
 
+// 背景照片装饰
+const BG_PHOTOS = [
+  { url: 'https://dtnawyqxxqsdrywsdqfd.supabase.co/storage/v1/object/public/winston-media/410ade3f-aac8-4ac3-b3a4-ce90e42dce44/IMG_8362.jpeg', top: '-4%', left: '-6%', w: 420, h: 340, rot: -10, dur: 19, dx: 12, dy: -16 },
+  { url: 'https://dtnawyqxxqsdrywsdqfd.supabase.co/storage/v1/object/public/winston-media/ec8205f0-7931-4220-b156-c87b57f2aa28/IMG_8361.jpeg', top: '8%', right: '-5%', w: 380, h: 300, rot: 7, dur: 23, dx: -10, dy: 14 },
+  { url: 'https://dtnawyqxxqsdrywsdqfd.supabase.co/storage/v1/object/public/winston-media/8cb6d543-0fe1-40cd-98da-8ebf92863d55/IMG_8323.jpeg', top: '38%', left: '-8%', w: 360, h: 290, rot: 5, dur: 21, dx: 14, dy: 10 },
+  { url: 'https://dtnawyqxxqsdrywsdqfd.supabase.co/storage/v1/object/public/winston-media/7f3e6c57-68d1-49ab-9bb2-69c2b8e0e122/IMG_8324.jpeg', top: '32%', right: '-7%', w: 400, h: 320, rot: -6, dur: 25, dx: -14, dy: -12 },
+  { url: 'https://dtnawyqxxqsdrywsdqfd.supabase.co/storage/v1/object/public/winston-media/8ecc5365-7783-4d3e-b78b-1de1fef4b695/IMG_2021.jpeg', bottom: '2%', left: '12%', w: 440, h: 340, rot: 4, dur: 22, dx: 10, dy: -14 },
+  { url: 'https://dtnawyqxxqsdrywsdqfd.supabase.co/storage/v1/object/public/winston-media/aeb3e6ca-2615-4568-8e8a-5dbd90c1ca60/____.png', bottom: '5%', right: '8%', w: 340, h: 280, rot: -8, dur: 20, dx: -12, dy: 16 },
+];
+
+function injectBgPhotos() {
+  if (document.querySelector('.bg-photos-container')) return;
+  const container = document.createElement('div');
+  container.className = 'bg-photos-container';
+  BG_PHOTOS.forEach(p => {
+    const img = document.createElement('img');
+    img.className = 'bg-photo';
+    img.src = p.url;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.style.cssText = `top:${p.top||'auto'};bottom:${p.bottom||'auto'};left:${p.left||'auto'};right:${p.right||'auto'};width:${p.w}px;height:${p.h}px;--rot:${p.rot}deg;--dx:${p.dx}px;--dy:${p.dy}px;animation-duration:${p.dur}s;`;
+    container.appendChild(img);
+  });
+  document.body.prepend(container);
+}
+
 // 页面初始化
 document.addEventListener('DOMContentLoaded', () => {
+  injectBgPhotos();
+
   const lightbox = document.getElementById('lightbox');
   if (lightbox) {
     const closeBtn = document.getElementById('closeLightbox');
