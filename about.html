@@ -5,6 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>关于 Winston - Winston 的时光机</title>
   <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .edit-btn {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      font-size: 1.2rem;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .edit-btn:hover {
+      background: var(--accent-dark);
+    }
+    .edit-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .edit-modal.open {
+      display: flex;
+    }
+    .edit-modal-box {
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .edit-modal-box h3 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }
+    .edit-modal-box textarea {
+      width: 100%;
+      min-height: 300px;
+      padding: 0.8rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: Georgia, serif;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      resize: vertical;
+    }
+    .edit-modal-actions {
+      display: flex;
+      gap: 0.8rem;
+      justify-content: flex-end;
+      margin-top: 1rem;
+    }
+    .about-content {
+      min-height: 200px;
+    }
+  </style>
 </head>
 <body>
   <header>
@@ -25,29 +93,8 @@
   <main class="container">
     <section class="memory-card">
       <h2 class="section-title">关于 Winston</h2>
-
-      <div class="about-photo-placeholder">🐕</div>
-
-      <article class="about-story">
-        <p>Winston 不是一只完美的小狗。他会把拖鞋藏起来，会在你打电话的时候突然大叫，会趁你不注意跳上沙发。</p>
-        <p>但他也知道，阳光最好的那个位置要留给打盹，门口响起钥匙声的时候要第一个跑过去，玩具要叼到喜欢的人面前。</p>
-        <p>现在他不在了。房间里安静了很多，狗粮碗还放在原来的地方。我们慢慢学会了，想念他不是一件需要完成的事，而是生活会突然冒出来的一个瞬间。</p>
-        <p>这个网站不是什么纪念碑，只是我们把他的碎片收拢起来的地方。一张他睡着的照片，一段他奔跑的视频，或者某天突然想起他的一句话。</p>
-      </article>
-
-      <div class="timeline">
-        <div class="timeline-item">
-          <div class="timeline-date">2018 年 5 月 12 日</div>
-          <div class="timeline-text">Winston 来了。从那天起，家里多了很多脚印和笑声。</div>
-        </div>
-        <div class="timeline-item">
-          <div class="timeline-date">2018 年 7 月</div>
-          <div class="timeline-text">他学会了握手。那天他吃了三块零食，得意了一下午。</div>
-        </div>
-        <div class="timeline-item">
-          <div class="timeline-date">2025 年 3 月 20 日</div>
-          <div class="timeline-text">Winston 离开了。我们说好了，不把他忘记。</div>
-        </div>
+      <div id="aboutContent" class="about-content">
+        <p style="color: var(--ink-light);">加载中...</p>
       </div>
 
       <div style="text-align: center; margin-top: 2rem;">
@@ -60,10 +107,69 @@
     Winston 还在这里 · 原型版本
   </footer>
 
+  <!-- 编辑按钮 -->
+  <button class="edit-btn" id="editBtn" title="编辑内容">✏️</button>
+
+  <!-- 编辑弹窗 -->
+  <div class="edit-modal" id="editModal">
+    <div class="edit-modal-box">
+      <h3>编辑关于 Winston</h3>
+      <textarea id="aboutEditor" placeholder="在这里编辑内容，支持 HTML 标签..."></textarea>
+      <div class="edit-modal-actions">
+        <button class="btn-cancel" id="cancelEdit">取消</button>
+        <button class="btn-primary" id="saveAbout">保存</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/supabase.min.js"></script>
   <script src="js/app.js"></script>
   <script>
-    initDB().catch(err => showInitError('关于页初始化失败：' + (err.message || err)));
+    (async function() {
+      try {
+        await initDB();
+        await loadAboutContent();
+
+        const editBtn = document.getElementById('editBtn');
+        const editModal = document.getElementById('editModal');
+        const aboutEditor = document.getElementById('aboutEditor');
+        const cancelEdit = document.getElementById('cancelEdit');
+        const saveAbout = document.getElementById('saveAbout');
+
+        editBtn.addEventListener('click', () => {
+          const password = prompt('请输入编辑密码：');
+          if (password === 'winston') {
+            aboutEditor.value = document.getElementById('aboutContent').innerHTML;
+            editModal.classList.add('open');
+          } else if (password !== null) {
+            alert('密码错误');
+          }
+        });
+
+        cancelEdit.addEventListener('click', () => editModal.classList.remove('open'));
+        editModal.addEventListener('click', (e) => {
+          if (e.target === editModal) editModal.classList.remove('open');
+        });
+
+        saveAbout.addEventListener('click', async () => {
+          const content = aboutEditor.value.trim();
+          if (!content) {
+            alert('内容不能为空');
+            return;
+          }
+          try {
+            await saveAboutContent(content);
+            editModal.classList.remove('open');
+            await loadAboutContent();
+            alert('保存成功');
+          } catch (err) {
+            alert('保存失败：' + err.message);
+          }
+        });
+      } catch (err) {
+        showInitError('关于页初始化失败：' + (err.message || err));
+      }
+    })();
   </script>
 </body>
 </html>
