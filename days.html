@@ -84,7 +84,7 @@
             alert('请填写完整的日期信息');
             return;
           }
-          const { error } = await supabase.from('days').insert({ name, date });
+          const { error } = await client.from('days').insert({ name, date });
           if (error) {
             console.error('保存失败:', error);
             alert('保存失败：' + error.message);
