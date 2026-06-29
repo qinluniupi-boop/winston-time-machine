@@ -63,6 +63,7 @@
         </div>
         <div class="lightbox-actions">
           <button class="btn-small" id="downloadBtn">⬇️ 保存原图</button>
+          <button class="btn-small" id="deleteBtn" style="background: #c1121f; color: white;">🗑️ 删除</button>
         </div>
         <div class="comments" id="commentsList"></div>
         <div class="comment-form">
@@ -82,6 +83,19 @@
         subscribeToChanges();
         await renderGallery(document.getElementById('recentGallery'), { limit: 6, emptyText: '还没有回忆，去上传第一张吧' });
         await renderDays(document.getElementById('upcomingDays'), { limit: 3 });
+
+        // 删除按钮
+        const deleteBtn = document.getElementById('deleteBtn');
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', async () => {
+            if (!currentMeta) return;
+            const success = await deleteMedia(currentMeta.id);
+            if (success) {
+              closeLightbox();
+              await renderGallery(document.getElementById('recentGallery'), { limit: 6, emptyText: '还没有回忆，去上传第一张吧' });
+            }
+          });
+        }
       } catch (err) {
         showInitError('首页初始化失败：' + (err.message || err));
       }
