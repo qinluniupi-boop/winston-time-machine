@@ -131,6 +131,7 @@ async function fetchDays() {
     .select('*')
     .order('date', { ascending: true });
   if (error) throw error;
+  console.log('fetchDays 返回数据:', data);
   return data || [];
 }
 
