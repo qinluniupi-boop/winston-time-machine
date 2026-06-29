@@ -5,6 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>上传回忆 - Winston 的时光机</title>
   <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .file-list {
+      margin-top: 1rem;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #e0d5c1;
+      border-radius: 4px;
+      padding: 0.5rem;
+    }
+    .file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem;
+      border-bottom: 1px solid #f0e6d2;
+      font-size: 0.9rem;
+    }
+    .file-item:last-child {
+      border-bottom: none;
+    }
+    .file-item-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-item-status {
+      margin-left: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--ink-light);
+    }
+    .file-item-status.success {
+      color: #2d6a4f;
+    }
+    .file-item-status.error {
+      color: #c1121f;
+    }
+    .file-item-status.uploading {
+      color: #e07b39;
+    }
+    .upload-summary {
+      margin-top: 0.8rem;
+      padding: 0.8rem;
+      background: #f9f5e9;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .upload-summary.show {
+      display: block;
+    }
+  </style>
 </head>
 <body>
   <header>
@@ -24,7 +76,7 @@
 
   <main class="container">
     <section class="memory-card">
-      <h2 class="section-title">放一张 Winston 的照片</h2>
+      <h2 class="section-title">放 Winston 的照片或视频</h2>
       <div class="form-row">
         <div>
           <label for="uploaderName">你是谁</label>
@@ -40,18 +92,18 @@
         <textarea id="memoryCaption" placeholder="那天发生了什么，你还记得吗？"></textarea>
       </div>
       <div class="drop-zone" id="dropZone">
-        <input type="file" id="fileInput" accept="image/*,video/*" />
+        <input type="file" id="fileInput" accept="image/*,video/*" multiple />
         <div id="dropText">
           <div style="font-size: 1.5rem; margin-bottom: 0.3rem;">🖼️</div>
           <div>把照片或视频放进来</div>
-          <div class="file-hint">支持 JPG、PNG、GIF、MP4、MOV 等格式</div>
+          <div class="file-hint">支持 JPG、PNG、GIF、MP4、MOV 等格式 · 可多选</div>
         </div>
       </div>
+      <div id="fileList" class="file-list" style="display: none;"></div>
+      <div id="uploadSummary" class="upload-summary"></div>
       <div style="margin-top: 1rem; text-align: right;">
-        <div id="uploadProgress" style="display:none; margin-bottom:0.5rem; font-size:0.85rem; color:var(--ink-light);">准备上传…</div>
-        <button class="btn-primary" id="uploadBtn" disabled>放这里</button>
+        <button class="btn-primary" id="uploadBtn" disabled>开始上传</button>
       </div>
-      <div id="debugLog" style="display:none; margin-top:1rem; padding:0.8rem; background:#f9f5e9; border:1px dashed #c9a86c; border-radius:3px; font-size:0.8rem; color:#6b5e4f; line-height:1.5; font-family:monospace; white-space:pre-wrap;"></div>
     </section>
   </main>
 
@@ -70,37 +122,51 @@
         const dropZone = document.getElementById('dropZone');
         const dropText = document.getElementById('dropText');
         const uploadBtn = document.getElementById('uploadBtn');
-        const uploadProgress = document.getElementById('uploadProgress');
+        const fileList = document.getElementById('fileList');
+        const uploadSummary = document.getElementById('uploadSummary');
         const uploaderName = document.getElementById('uploaderName');
         const memoryDate = document.getElementById('memoryDate');
         const memoryCaption = document.getElementById('memoryCaption');
 
         memoryDate.value = new Date().toISOString().slice(0, 10);
-        let selectedFile = null;
+        let selectedFiles = [];
 
         function formatFileName(file) {
-          const max = 20;
+          const max = 25;
           const name = file.name;
           if (name.length <= max) return name;
-          return name.slice(0, 10) + '...' + name.slice(-7);
+          return name.slice(0, 12) + '...' + name.slice(-10);
         }
 
-        function handleFileSelect(file) {
-          if (!file) return;
-          selectedFile = file;
-          dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">✅</div><div>已选择：${formatFileName(selectedFile)}</div><div class="file-hint">${(selectedFile.size / 1024 / 1024).toFixed(2)} MB · 点击可重新选择</div>`;
+        function updateFileList() {
+          if (selectedFiles.length === 0) {
+            fileList.style.display = 'none';
+            fileList.innerHTML = '';
+            return;
+          }
+
+          fileList.style.display = 'block';
+          fileList.innerHTML = selectedFiles.map((file, index) => `
+            <div class="file-item" data-index="${index}">
+              <span class="file-item-name">${formatFileName(file)}</span>
+              <span class="file-item-status" id="fileStatus${index}">等待上传</span>
+            </div>
+          `).join('');
+        }
+
+        function handleFileSelect(files) {
+          if (!files || files.length === 0) return;
+          selectedFiles = Array.from(files);
+          updateFileList();
           uploadBtn.disabled = false;
-          uploadBtn.textContent = '放这里';
+          uploadBtn.textContent = `开始上传 (${selectedFiles.length} 个文件)`;
+          dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">✅</div><div>已选择 ${selectedFiles.length} 个文件</div><div class="file-hint">点击可重新选择</div>`;
         }
 
         fileInput.addEventListener('change', (e) => {
-          log('change 事件触发');
-          const files = fileInput.files || (e && e.target && e.target.files) || (e && e.dataTransfer && e.dataTransfer.files);
-          log(`读取到 files: ${files ? files.length : 'null'}`);
-          if (files && files[0]) {
-            handleFileSelect(files[0]);
-          } else {
-            log('没有从 change 事件拿到文件');
+          const files = fileInput.files || (e && e.target && e.target.files);
+          if (files && files.length > 0) {
+            handleFileSelect(files);
           }
         });
 
@@ -112,18 +178,10 @@
         });
         dropZone.addEventListener('drop', (e) => {
           const files = e.dataTransfer && e.dataTransfer.files;
-          if (files && files[0]) {
-            handleFileSelect(files[0]);
+          if (files && files.length > 0) {
+            handleFileSelect(files);
           }
         });
-
-        const debugLog = document.getElementById('debugLog');
-        function log(msg) {
-          const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
-          console.log(line);
-          debugLog.style.display = 'block';
-          debugLog.textContent += line + '\n';
-        }
 
         function fetchWithTimeout(url, options, timeoutMs = 30000) {
           if (typeof AbortController !== 'undefined') {
@@ -144,34 +202,22 @@
           ]);
         }
 
-        uploadBtn.addEventListener('click', async () => {
-          if (!selectedFile) return;
-          debugLog.textContent = '';
-          uploadBtn.disabled = true;
-          uploadBtn.textContent = '上传中…';
-          uploadProgress.style.display = 'block';
-          uploadProgress.textContent = '准备上传…';
-
-          const name = uploaderName.value.trim() || '某个想他的人';
-          const caption = memoryCaption.value.trim();
-          const date = memoryDate.value || new Date().toISOString().slice(0, 10);
-
-          const fileType = selectedFile.type || '';
-          const isVideo = fileType.startsWith('video') || /\.(mp4|mov|m4v|avi|mkv)$/i.test(selectedFile.name);
-          const safeName = selectedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_') || 'file';
-
-          const mediaId = generateId();
-          const storagePath = `${mediaId}/${safeName}`;
-          const contentType = fileType || (isVideo ? 'video/mp4' : 'image/jpeg');
-
-          const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-          log(`文件: ${selectedFile.name}, 大小: ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB, 类型: ${contentType}`);
-          log(`网络: ${navigator.onLine ? '在线' : '离线'}, ${conn ? `effectiveType=${conn.effectiveType}, downlink=${conn.downlink}` : '未知'}`);
+        async function uploadSingleFile(file, index, name, caption, date) {
+          const statusEl = document.getElementById(`fileStatus${index}`);
+          if (statusEl) {
+            statusEl.textContent = '上传中...';
+            statusEl.className = 'file-item-status uploading';
+          }
 
           try {
-            // 1. 直接用 fetch 上传到 Storage，body 用 File 对象本身
-            log('开始上传文件到 Storage…');
-            uploadProgress.textContent = '正在把文件放到仓库…';
+            const fileType = file.type || '';
+            const isVideo = fileType.startsWith('video') || /\.(mp4|mov|m4v|avi|mkv)$/i.test(file.name);
+            const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_') || 'file';
+            const mediaId = generateId();
+            const storagePath = `${mediaId}/${safeName}`;
+            const contentType = fileType || (isVideo ? 'video/mp4' : 'image/jpeg');
+
+            // 1. 上传到 Storage
             const uploadResp = await fetchWithTimeout(`${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${storagePath}`, {
               method: 'POST',
               headers: {
@@ -180,17 +226,15 @@
                 'Content-Type': contentType,
                 'x-upsert': 'false'
               },
-              body: selectedFile
+              body: file
             }, 30000);
-            log(`Storage 响应状态: ${uploadResp.status}`);
+
             if (!uploadResp.ok) {
               const errText = await readTextWithTimeout(uploadResp).catch(() => '');
               throw new Error(`Storage 上传失败 (${uploadResp.status}): ${errText}`);
             }
 
             // 2. 写入 media 表
-            log('写入 media 表…');
-            uploadProgress.textContent = '正在记录这张照片…';
             const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
             const dbResp = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/media`, {
               method: 'POST',
@@ -207,28 +251,72 @@
                 uploader: name,
                 date,
                 storage_path: storagePath,
-                file_name: selectedFile.name,
+                file_name: file.name,
                 public_url: publicUrl
               })
             }, 15000);
-            log(`media 表响应状态: ${dbResp.status}`);
+
             if (!dbResp.ok) {
               const dbErrText = await readTextWithTimeout(dbResp).catch(() => '');
               throw new Error(`media 表写入失败 (${dbResp.status}): ${dbErrText}`);
             }
 
-            log('上传完成');
-            uploadProgress.textContent = '完成';
-            alert('这张照片已经留在这里了。');
-            window.location.href = 'gallery.html';
+            if (statusEl) {
+              statusEl.textContent = '✓ 完成';
+              statusEl.className = 'file-item-status success';
+            }
+            return true;
           } catch (err) {
-            console.error('上传失败', err);
-            const detail = err && (err.error_description || err.message || err.statusText || err.status || JSON.stringify(err));
-            log(`错误: ${detail || '未知错误'}`);
-            alert('上传没有成功：' + (detail || '未知错误，请检查网络后重试。'));
+            console.error(`文件 ${file.name} 上传失败`, err);
+            if (statusEl) {
+              statusEl.textContent = '✗ 失败';
+              statusEl.className = 'file-item-status error';
+            }
+            return false;
+          }
+        }
+
+        uploadBtn.addEventListener('click', async () => {
+          if (selectedFiles.length === 0) return;
+
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = '上传中...';
+          uploadSummary.classList.remove('show');
+
+          const name = uploaderName.value.trim() || '某个想他的人';
+          const caption = memoryCaption.value.trim();
+          const date = memoryDate.value || new Date().toISOString().slice(0, 10);
+
+          let successCount = 0;
+          let failCount = 0;
+
+          for (let i = 0; i < selectedFiles.length; i++) {
+            const success = await uploadSingleFile(selectedFiles[i], i, name, caption, date);
+            if (success) successCount++;
+            else failCount++;
+          }
+
+          // 显示总结
+          uploadSummary.innerHTML = `
+            <strong>上传完成</strong><br>
+            成功：${successCount} 个<br>
+            失败：${failCount} 个
+          `;
+          uploadSummary.classList.add('show');
+
+          if (failCount === 0) {
+            setTimeout(() => {
+              window.location.href = 'gallery.html';
+            }, 1500);
+          } else {
             uploadBtn.disabled = false;
-            uploadBtn.textContent = '再试一次';
-            uploadProgress.style.display = 'none';
+            uploadBtn.textContent = '重新上传失败的';
+            // 只保留失败的文件
+            selectedFiles = selectedFiles.filter((_, index) => {
+              const statusEl = document.getElementById(`fileStatus${index}`);
+              return statusEl && statusEl.classList.contains('error');
+            });
+            updateFileList();
           }
         });
       } catch (err) {
