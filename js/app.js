@@ -322,7 +322,9 @@ async function loadAboutContent() {
     }
 
     if (data && data.value) {
-      container.innerHTML = data.value;
+      // 将纯文本转换为 HTML 段落（按双换行分段）
+      const paragraphs = data.value.split(/\n\n+/).filter(p => p.trim());
+      container.innerHTML = paragraphs.map(p => `<p>${escapeHtml(p.trim()).replace(/\n/g, '<br>')}</p>`).join('');
     } else {
       container.innerHTML = '<p style="color: var(--ink-light);">还没有关于 Winston 的内容。</p>';
     }
