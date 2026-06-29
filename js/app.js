@@ -80,6 +80,32 @@ function daysUntil(dateStr) {
   return Math.round((target - today) / (1000 * 60 * 60 * 24));
 }
 
+function daysSinceOriginal(dateStr) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const original = new Date(dateStr);
+  original.setHours(0,0,0,0);
+  return Math.round((today - original) / (1000 * 60 * 60 * 24));
+}
+
+function formatDayCountdown(dateStr) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const original = new Date(dateStr);
+  original.setHours(0,0,0,0);
+  const diff = Math.round((today - original) / (1000 * 60 * 60 * 24));
+  if (diff === 0) return '今天';
+  if (diff > 0) {
+    const years = Math.floor(diff / 365);
+    if (years >= 1) {
+      return `第 ${years} 周年 · ${diff} 天`;
+    }
+    return `第 ${diff} 天`;
+  }
+  const daysLeft = -diff;
+  return `还有 ${daysLeft} 天`;
+}
+
 async function fetchMedia() {
   const { data, error } = await client
     .from('media')
@@ -255,14 +281,14 @@ async function renderDays(container, options = {}) {
     return;
   }
   for (const d of displayDays) {
-    const daysLeft = daysUntil(d.date);
+    const countdownText = formatDayCountdown(d.date);
     const div = document.createElement('div');
     div.className = 'day-item';
     div.dataset.dayId = d.id;
     div.innerHTML = `
       <div class="day-name">${escapeHtml(d.name)}</div>
       <div class="day-date">${d.date}</div>
-      <div class="day-countdown">${daysLeft === 0 ? '今天' : `还有 ${daysLeft} 天`}</div>
+      <div class="day-countdown">${countdownText}</div>
     `;
     if (!limit) {
       div.addEventListener('dblclick', async () => {
