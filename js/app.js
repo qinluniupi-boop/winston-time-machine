@@ -271,15 +271,23 @@ function downloadMedia(meta) {
 // 纪念日媒体上传
 async function uploadDayMedia(file, dayId) {
   try {
+    console.log('开始上传纪念日媒体:', file.name, '大小:', (file.size / 1024 / 1024).toFixed(2), 'MB');
+    
     const fileType = file.type || '';
     const isVideo = fileType.startsWith('video') || /\.(mp4|mov|m4v|avi|mkv)$/i.test(file.name);
     const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_') || 'file';
     const mediaId = dayId || generateId();
-    const storagePath = `days/${mediaId}/${safeName}`;
+    const storagePath = `day-media/${mediaId}/${safeName}`;
     const contentType = fileType || (isVideo ? 'video/mp4' : 'image/jpeg');
 
+    console.log('存储路径:', storagePath);
+    console.log('Content-Type:', contentType);
+
     // 上传到 Storage
-    const uploadResp = await fetchWithTimeout(`${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${storagePath}`, {
+    const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${storagePath}`;
+    console.log('上传 URL:', uploadUrl);
+    
+    const uploadResp = await fetchWithTimeout(uploadUrl, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_ANON_KEY,
@@ -290,12 +298,17 @@ async function uploadDayMedia(file, dayId) {
       body: file
     }, 30000);
 
+    console.log('上传响应状态:', uploadResp.status);
+    
     if (!uploadResp.ok) {
       const errText = await readTextWithTimeout(uploadResp).catch(() => '');
+      console.error('上传失败详情:', errText);
       throw new Error(`Storage 上传失败 (${uploadResp.status}): ${errText}`);
     }
 
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
+    console.log('上传成功, publicUrl:', publicUrl);
+    
     return {
       publicUrl,
       type: isVideo ? 'video' : 'image',
