@@ -111,6 +111,7 @@
     Winston 还在这里 · 原型版本
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
   <script src="js/supabase.min.js"></script>
   <script src="js/app.js"></script>
   <script>
@@ -154,19 +155,49 @@
           `).join('');
         }
 
-        function handleFileSelect(files) {
+        async function convertHeicToJpeg(file) {
+          if (typeof heic2any === 'undefined') return file;
+          const ext = file.name.split('.').pop().toLowerCase();
+          if (ext !== 'heic' && ext !== 'heif' && file.type !== 'image/heic' && file.type !== 'image/heif') return file;
+          try {
+            const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+            const jpegBlob = Array.isArray(blob) ? blob[0] : blob;
+            const newName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
+            return new File([jpegBlob], newName, { type: 'image/jpeg' });
+          } catch (err) {
+            console.error('HEIC 转换失败:', file.name, err);
+            return file;
+          }
+        }
+
+        async function handleFileSelect(files) {
           if (!files || files.length === 0) return;
-          selectedFiles = Array.from(files);
+          const rawFiles = Array.from(files);
+          selectedFiles = [];
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = '处理中...';
+          dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;"></div><div>正在处理 ${rawFiles.length} 个文件...</div>`;
+
+          for (let i = 0; i < rawFiles.length; i++) {
+            const f = rawFiles[i];
+            const ext = f.name.split('.').pop().toLowerCase();
+            if (ext === 'heic' || ext === 'heif') {
+              dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">⏳</div><div>正在转换 HEIC 照片 (${i + 1}/${rawFiles.length})...</div>`;
+            }
+            const converted = await convertHeicToJpeg(f);
+            selectedFiles.push(converted);
+          }
+
           updateFileList();
           uploadBtn.disabled = false;
           uploadBtn.textContent = `开始上传 (${selectedFiles.length} 个文件)`;
           dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">✅</div><div>已选择 ${selectedFiles.length} 个文件</div><div class="file-hint">点击可重新选择</div>`;
         }
 
-        fileInput.addEventListener('change', (e) => {
+        fileInput.addEventListener('change', async (e) => {
           const files = fileInput.files || (e && e.target && e.target.files);
           if (files && files.length > 0) {
-            handleFileSelect(files);
+            await handleFileSelect(files);
           }
         });
 
@@ -176,10 +207,10 @@
         ['dragleave', 'drop'].forEach((evt) => {
           dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
         });
-        dropZone.addEventListener('drop', (e) => {
+        dropZone.addEventListener('drop', async (e) => {
           const files = e.dataTransfer && e.dataTransfer.files;
           if (files && files.length > 0) {
-            handleFileSelect(files);
+            await handleFileSelect(files);
           }
         });
 
