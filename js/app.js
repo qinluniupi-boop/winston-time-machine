@@ -135,6 +135,43 @@ async function fetchDays() {
   return data || [];
 }
 
+// HEIC 图片 fallback：桌面浏览器不支持 HEIC，需要客户端转换
+let heic2anyLoaded = null;
+function loadHeic2Any() {
+  if (heic2anyLoaded) return heic2anyLoaded;
+  heic2anyLoaded = new Promise((resolve, reject) => {
+    if (typeof heic2any !== 'undefined') { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('heic2any 加载失败'));
+    document.head.appendChild(s);
+  });
+  return heic2anyLoaded;
+}
+
+function isHeicUrl(url) {
+  return /\.heic($|\?)/i.test(url);
+}
+
+async function handleHeicImage(imgEl, url) {
+  if (!isHeicUrl(url)) return;
+  try {
+    await loadHeic2Any();
+    imgEl.style.opacity = '0.4';
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const jpegBlob = await heic2any({ blob, toType: 'image/jpeg', quality: 0.9 });
+    const result = Array.isArray(jpegBlob) ? jpegBlob[0] : jpegBlob;
+    imgEl.src = URL.createObjectURL(result);
+    imgEl.style.opacity = '1';
+  } catch (err) {
+    console.error('HEIC 转换失败:', url, err);
+    imgEl.alt = '（此照片为 HEIC 格式，请在手机上查看）';
+    imgEl.style.opacity = '0.3';
+  }
+}
+
 async function createPolaroidCard(meta) {
   const comments = await fetchComments(meta.id);
 
@@ -147,7 +184,8 @@ async function createPolaroidCard(meta) {
   if (meta.type === 'video') {
     mediaHTML = `<div class="polaroid-video"><video src="${meta.public_url}" muted preload="metadata"></video><span>▶</span></div>`;
   } else {
-    mediaHTML = `<img class="polaroid-media" src="${meta.public_url}" alt="${escapeHtml(meta.caption || 'Winston 的回忆')}" loading="lazy" />`;
+    const heicAttr = isHeicUrl(meta.public_url) ? ` onerror="handleHeicImage(this,'${meta.public_url}')"` : '';
+    mediaHTML = `<img class="polaroid-media" src="${meta.public_url}" alt="${escapeHtml(meta.caption || 'Winston 的回忆')}" loading="lazy"${heicAttr} />`;
   }
 
   card.innerHTML = `
@@ -205,6 +243,9 @@ function openLightbox(meta) {
     const img = document.createElement('img');
     img.src = meta.public_url;
     img.alt = meta.caption || 'Winston 的回忆';
+    if (isHeicUrl(meta.public_url)) {
+      img.onerror = () => handleHeicImage(img, meta.public_url);
+    }
     mediaWrap.appendChild(img);
   }
   caption.textContent = meta.caption || '一个没写下什么的瞬间';
