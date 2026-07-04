@@ -190,12 +190,24 @@ async function createPolaroidCard(meta) {
 
   card.innerHTML = `
     ${mediaHTML}
+    <div class="select-check" data-media-id="${meta.id}">✓</div>
     <div class="polaroid-caption">${escapeHtml(meta.caption) || '一个没写下什么的瞬间'}</div>
     <div class="polaroid-meta">
       <span>👤 ${escapeHtml(meta.uploader)} · ${meta.date}</span>
       <span>💬 ${comments.length}</span>
     </div>
   `;
+
+  // 选择框点击：阻止冒泡，不打开灯箱
+  const check = card.querySelector('.select-check');
+  if (check) {
+    check.addEventListener('click', (e) => {
+      e.stopPropagation();
+      card.classList.toggle('selected');
+      updateBatchBar();
+    });
+  }
+
   return card;
 }
 
@@ -547,6 +559,104 @@ async function deleteMedia(mediaId) {
     alert('删除失败：' + err.message);
     return false;
   }
+}
+
+// ===== 批量下载 =====
+function getSelectedCards() {
+  return Array.from(document.querySelectorAll('.polaroid.selected'));
+}
+
+function updateBatchBar() {
+  const bar = document.getElementById('batchBar');
+  const countEl = document.getElementById('batchCount');
+  const downloadBtn = document.getElementById('batchDownload');
+  const selectAllBtn = document.getElementById('batchSelectAll');
+  if (!bar) return;
+
+  const selected = getSelectedCards();
+  const count = selected.length;
+  const total = document.querySelectorAll('.polaroid').length;
+
+  if (countEl) countEl.textContent = `已选 ${count} 个 / 共 ${total} 个`;
+  if (downloadBtn) {
+    downloadBtn.disabled = count === 0;
+    downloadBtn.textContent = count > 0 ? `下载选中 (${count})` : '下载选中';
+  }
+  if (selectAllBtn) {
+    selectAllBtn.textContent = count === total && total > 0 ? '取消全选' : '全选';
+  }
+}
+
+async function downloadSingleFile(url, fileName) {
+  const ext = fileName.split('.').pop().toLowerCase();
+  const isVideo = ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm'].includes(ext);
+
+  if (isVideo) {
+    // 视频用 fetch + blob 下载，避免浏览器直接打开
+    const resp = await fetchWithTimeout(url, {}, 60000);
+    if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+  } else {
+    // 图片直接用 download 属性
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}
+
+async function batchDownloadSelected() {
+  const selected = getSelectedCards();
+  if (selected.length === 0) return;
+
+  const downloadBtn = document.getElementById('batchDownload');
+  const cancelBtn = document.getElementById('batchCancel');
+  const countEl = document.getElementById('batchCount');
+
+  if (downloadBtn) { downloadBtn.disabled = true; downloadBtn.textContent = '下载中...'; }
+  if (cancelBtn) cancelBtn.disabled = true;
+
+  let success = 0;
+  let failed = 0;
+
+  for (let i = 0; i < selected.length; i++) {
+    const card = selected[i];
+    const metaId = card.dataset.mediaId;
+    if (countEl) countEl.textContent = `下载中... (${i + 1}/${selected.length})`;
+
+    try {
+      // 从数据库获取文件信息
+      const { data: media, error } = await client.from('media').select('*').eq('id', metaId).single();
+      if (error || !media) throw new Error('找不到文件信息');
+
+      const fileName = media.file_name || `winston-${metaId.slice(0, 8)}.${media.type === 'video' ? 'mp4' : 'jpg'}`;
+      await downloadSingleFile(media.public_url, fileName);
+      success++;
+
+      // 每个文件之间稍作间隔，避免浏览器限制
+      if (i < selected.length - 1) {
+        await new Promise(r => setTimeout(r, 800));
+      }
+    } catch (err) {
+      console.error(`下载失败: ${metaId}`, err);
+      failed++;
+    }
+  }
+
+  if (countEl) countEl.textContent = `完成：成功 ${success} 个，失败 ${failed} 个`;
+  if (downloadBtn) { downloadBtn.disabled = false; downloadBtn.textContent = `下载选中 (${getSelectedCards().length})`; }
+  if (cancelBtn) cancelBtn.disabled = false;
 }
 
 // 实时订阅
