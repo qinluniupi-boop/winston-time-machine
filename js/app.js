@@ -315,11 +315,9 @@ async function submitComment() {
   await renderComments(currentMeta.id);
 }
 
-function downloadMedia(meta) {
-  const a = document.createElement('a');
-  a.href = meta.public_url;
-  a.download = meta.file_name || (meta.type === 'video' ? 'winston-video.mp4' : 'winston-photo.jpg');
-  a.click();
+async function downloadMedia(meta) {
+  const fileName = meta.file_name || (meta.type === 'video' ? 'winston-video.mp4' : 'winston-photo.jpg');
+  await saveFile(meta.public_url, fileName);
 }
 
 // 纪念日媒体上传
@@ -561,6 +559,145 @@ async function deleteMedia(mediaId) {
   }
 }
 
+// ===== 下载工具 =====
+function isMobile() {
+  return /android|iphone|ipad|ipod|mobile|touch/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 0 && !/windows/i.test(navigator.userAgent));
+}
+
+function showToast(msg) {
+  const existing = document.querySelector('.app-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'app-toast';
+  toast.textContent = msg;
+  toast.style.cssText = 'position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:rgba(61,52,41,0.92);color:#f9f5e9;padding:0.8rem 1.2rem;border-radius:6px;font-size:0.9rem;z-index:30000;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.4s';
+    setTimeout(() => toast.remove(), 400);
+  }, 3500);
+}
+
+async function fetchBlob(url, timeoutMs = 60000) {
+  const resp = await fetchWithTimeout(url, {}, timeoutMs);
+  if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
+  return await resp.blob();
+}
+
+async function saveWithFilePicker(blob, fileName) {
+  const handle = await window.showSaveFilePicker({
+    suggestedName: fileName,
+    types: [{ description: '媒体文件', accept: { '*/*': [] } }]
+  });
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+}
+
+async function saveWithDirectoryPicker(files) {
+  const dirHandle = await window.showDirectoryPicker();
+  for (const { blob, fileName } of files) {
+    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  }
+}
+
+async function shareFiles(fileObjects) {
+  if (!navigator.canShare) throw new Error('不支持分享');
+  const files = fileObjects.map(f => new File([f.blob], f.fileName, { type: f.blob.type || 'application/octet-stream' }));
+  if (!navigator.canShare({ files })) throw new Error('无法分享该类型文件');
+  await navigator.share({ files, title: 'Winston 的回忆' });
+}
+
+function fallbackAnchorDownload(url, fileName) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.target = '_blank';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function saveFile(url, fileName) {
+  if (isMobile()) {
+    try {
+      const blob = await fetchBlob(url);
+      await shareFiles([{ blob, fileName }]);
+      return;
+    } catch (e) {
+      console.log('移动设备分享失败，改为新标签页打开', e);
+      window.open(url, '_blank');
+      showToast('已在新标签页打开，长按图片/视频即可保存到相册');
+      return;
+    }
+  }
+
+  if (window.showSaveFilePicker) {
+    try {
+      const blob = await fetchBlob(url);
+      await saveWithFilePicker(blob, fileName);
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      console.error('选择保存位置失败，使用默认下载', err);
+    }
+  }
+
+  fallbackAnchorDownload(url, fileName);
+}
+
+async function saveBatchFiles(fileList) {
+  if (fileList.length === 0) return;
+
+  if (isMobile()) {
+    try {
+      const fileObjects = [];
+      for (const f of fileList) {
+        const blob = await fetchBlob(f.url);
+        fileObjects.push({ blob, fileName: f.fileName });
+      }
+      await shareFiles(fileObjects);
+      showToast(`已分享 ${fileList.length} 个文件，请选择保存到相册`);
+      return;
+    } catch (e) {
+      console.log('批量分享失败，使用默认下载', e);
+      for (const f of fileList) {
+        fallbackAnchorDownload(f.url, f.fileName);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      showToast('文件已保存到「下载」文件夹，可在相册/文件管理中查看');
+      return;
+    }
+  }
+
+  if (window.showDirectoryPicker) {
+    try {
+      const fileObjects = [];
+      for (const f of fileList) {
+        const blob = await fetchBlob(f.url);
+        fileObjects.push({ blob, fileName: f.fileName });
+      }
+      await saveWithDirectoryPicker(fileObjects);
+      showToast(`已保存 ${fileList.length} 个文件到所选文件夹`);
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      console.error('选择文件夹失败，使用默认下载', err);
+    }
+  }
+
+  for (const f of fileList) {
+    await saveFile(f.url, f.fileName);
+    if (fileList.length > 1) await new Promise(r => setTimeout(r, 600));
+  }
+}
+
 // ===== 批量下载 =====
 function getSelectedCards() {
   return Array.from(document.querySelectorAll('.polaroid.selected'));
@@ -588,32 +725,7 @@ function updateBatchBar() {
 }
 
 async function downloadSingleFile(url, fileName) {
-  const ext = fileName.split('.').pop().toLowerCase();
-  const isVideo = ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm'].includes(ext);
-
-  if (isVideo) {
-    // 视频用 fetch + blob 下载，避免浏览器直接打开
-    const resp = await fetchWithTimeout(url, {}, 60000);
-    if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
-    const blob = await resp.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-  } else {
-    // 图片直接用 download 属性
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
+  await saveFile(url, fileName);
 }
 
 async function batchDownloadSelected() {
@@ -624,37 +736,36 @@ async function batchDownloadSelected() {
   const cancelBtn = document.getElementById('batchCancel');
   const countEl = document.getElementById('batchCount');
 
-  if (downloadBtn) { downloadBtn.disabled = true; downloadBtn.textContent = '下载中...'; }
+  if (downloadBtn) { downloadBtn.disabled = true; downloadBtn.textContent = '准备中...'; }
   if (cancelBtn) cancelBtn.disabled = true;
 
-  let success = 0;
+  const fileList = [];
   let failed = 0;
 
-  for (let i = 0; i < selected.length; i++) {
-    const card = selected[i];
+  for (const card of selected) {
     const metaId = card.dataset.mediaId;
-    if (countEl) countEl.textContent = `下载中... (${i + 1}/${selected.length})`;
-
     try {
-      // 从数据库获取文件信息
       const { data: media, error } = await client.from('media').select('*').eq('id', metaId).single();
       if (error || !media) throw new Error('找不到文件信息');
-
       const fileName = media.file_name || `winston-${metaId.slice(0, 8)}.${media.type === 'video' ? 'mp4' : 'jpg'}`;
-      await downloadSingleFile(media.public_url, fileName);
-      success++;
-
-      // 每个文件之间稍作间隔，避免浏览器限制
-      if (i < selected.length - 1) {
-        await new Promise(r => setTimeout(r, 800));
-      }
+      fileList.push({ url: media.public_url, fileName });
     } catch (err) {
-      console.error(`下载失败: ${metaId}`, err);
+      console.error(`获取文件信息失败: ${metaId}`, err);
       failed++;
     }
   }
 
-  if (countEl) countEl.textContent = `完成：成功 ${success} 个，失败 ${failed} 个`;
+  if (fileList.length === 0) {
+    if (countEl) countEl.textContent = '没有可下载的文件';
+    if (downloadBtn) { downloadBtn.disabled = false; downloadBtn.textContent = `下载选中 (${getSelectedCards().length})`; }
+    if (cancelBtn) cancelBtn.disabled = false;
+    return;
+  }
+
+  if (countEl) countEl.textContent = `正在下载 ${fileList.length} 个文件...`;
+  await saveBatchFiles(fileList);
+
+  if (countEl) countEl.textContent = `完成：成功 ${fileList.length} 个${failed > 0 ? '，失败 ' + failed + ' 个' : ''}`;
   if (downloadBtn) { downloadBtn.disabled = false; downloadBtn.textContent = `下载选中 (${getSelectedCards().length})`; }
   if (cancelBtn) cancelBtn.disabled = false;
 }
