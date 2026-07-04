@@ -29,10 +29,23 @@
         <button class="filter-btn active" data-filter="all">全部</button>
         <button class="filter-btn" data-filter="image">照片</button>
         <button class="filter-btn" data-filter="video">视频</button>
+        <button class="batch-download-btn" id="batchDownloadToggle">📥 批量下载</button>
       </div>
       <div id="gallery" class="gallery"></div>
     </section>
   </main>
+
+  <!-- 批量操作栏 -->
+  <div class="batch-bar" id="batchBar">
+    <div class="batch-bar-info">
+      <span id="batchCount">已选 0 个</span>
+      <button class="batch-btn" id="batchSelectAll" style="margin-left: 0.8rem;">全选</button>
+    </div>
+    <div class="batch-bar-actions">
+      <button class="batch-btn" id="batchCancel">取消</button>
+      <button class="batch-btn primary" id="batchDownload" disabled>下载选中</button>
+    </div>
+  </div>
 
   <footer>
     Winston 还在这里 · 原型版本
@@ -89,6 +102,54 @@
               closeLightbox();
               await renderGallery(gallery, { emptyText: '这里还空着，可以先去放一张照片' });
             }
+          });
+        }
+
+        // ===== 批量下载 =====
+        let selectionMode = false;
+        const batchBar = document.getElementById('batchBar');
+        const batchToggle = document.getElementById('batchDownloadToggle');
+        const batchSelectAll = document.getElementById('batchSelectAll');
+        const batchCancel = document.getElementById('batchCancel');
+        const batchDownload = document.getElementById('batchDownload');
+
+        function toggleSelectionMode() {
+          selectionMode = !selectionMode;
+          gallery.classList.toggle('select-mode', selectionMode);
+          batchBar.classList.toggle('show', selectionMode);
+          batchToggle.textContent = selectionMode ? ' 退出选择' : '📥 批量下载';
+          if (!selectionMode) {
+            document.querySelectorAll('.polaroid.selected').forEach(c => c.classList.remove('selected'));
+            updateBatchBar();
+          } else {
+            updateBatchBar();
+          }
+        }
+
+        if (batchToggle) batchToggle.addEventListener('click', toggleSelectionMode);
+
+        if (batchSelectAll) {
+          batchSelectAll.addEventListener('click', () => {
+            const cards = document.querySelectorAll('.polaroid');
+            const selected = document.querySelectorAll('.polaroid.selected');
+            if (selected.length === cards.length && cards.length > 0) {
+              cards.forEach(c => c.classList.remove('selected'));
+            } else {
+              cards.forEach(c => c.classList.add('selected'));
+            }
+            updateBatchBar();
+          });
+        }
+
+        if (batchCancel) {
+          batchCancel.addEventListener('click', () => {
+            if (selectionMode) toggleSelectionMode();
+          });
+        }
+
+        if (batchDownload) {
+          batchDownload.addEventListener('click', async () => {
+            await batchDownloadSelected();
           });
         }
       } catch (err) {
