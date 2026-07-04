@@ -989,3 +989,21 @@ footer {
   0% { transform: translate(0, 0) rotate(var(--rot, 0deg)); }
   100% { transform: translate(var(--dx, 10px), var(--dy, -14px)) rotate(calc(var(--rot, 0deg) + 2deg)); }
 }
+
+/* 轻提示 */
+.app-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(61, 52, 41, 0.92);
+  color: #f9f5e9;
+  padding: 0.8rem 1.2rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  z-index: 30000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  max-width: 90vw;
+  text-align: center;
+  line-height: 1.5;
+}
