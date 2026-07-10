@@ -8,7 +8,7 @@
   <style>
     .file-list {
       margin-top: 1rem;
-      max-height: 200px;
+      max-height: 260px;
       overflow-y: auto;
       border: 1px solid #e0d5c1;
       border-radius: 4px;
@@ -35,6 +35,7 @@
       margin-left: 0.5rem;
       font-size: 0.8rem;
       color: var(--ink-light);
+      white-space: nowrap;
     }
     .file-item-status.success {
       color: #2d6a4f;
@@ -54,6 +55,15 @@
       display: none;
     }
     .upload-summary.show {
+      display: block;
+    }
+    .overall-progress {
+      margin-top: 0.8rem;
+      font-size: 0.9rem;
+      color: var(--ink-light);
+      display: none;
+    }
+    .overall-progress.show {
       display: block;
     }
   </style>
@@ -100,6 +110,7 @@
         </div>
       </div>
       <div id="fileList" class="file-list" style="display: none;"></div>
+      <div id="overallProgress" class="overall-progress"></div>
       <div id="uploadSummary" class="upload-summary"></div>
       <div style="margin-top: 1rem; text-align: right;">
         <button class="btn-primary" id="uploadBtn" disabled>开始上传</button>
@@ -125,12 +136,14 @@
         const uploadBtn = document.getElementById('uploadBtn');
         const fileList = document.getElementById('fileList');
         const uploadSummary = document.getElementById('uploadSummary');
+        const overallProgress = document.getElementById('overallProgress');
         const uploaderName = document.getElementById('uploaderName');
         const memoryDate = document.getElementById('memoryDate');
         const memoryCaption = document.getElementById('memoryCaption');
 
         memoryDate.value = new Date().toISOString().slice(0, 10);
         let selectedFiles = [];
+        let isUploading = false;
 
         function formatFileName(file) {
           const max = 25;
@@ -147,18 +160,43 @@
           }
 
           fileList.style.display = 'block';
-          fileList.innerHTML = selectedFiles.map((file, index) => `
+          fileList.innerHTML = selectedFiles.map((item, index) => `
             <div class="file-item" data-index="${index}">
-              <span class="file-item-name">${formatFileName(file)}</span>
-              <span class="file-item-status" id="fileStatus${index}">等待上传</span>
+              <span class="file-item-name">${formatFileName(item.file)}</span>
+              <span class="file-item-status" id="fileStatus${index}">${item.status}</span>
             </div>
           `).join('');
         }
 
+        function setFileStatus(index, text, className) {
+          const el = document.getElementById(`fileStatus${index}`);
+          if (!el) return;
+          el.textContent = text;
+          el.className = 'file-item-status ' + (className || '');
+        }
+
+        function getFileExt(file) {
+          return (file.name.split('.').pop() || '').toLowerCase();
+        }
+
+        function isHeicFile(file) {
+          const ext = getFileExt(file);
+          return ext === 'heic' || ext === 'heif' || file.type === 'image/heic' || file.type === 'image/heif';
+        }
+
+        function isVideoFile(file) {
+          const ext = getFileExt(file);
+          return (file.type || '').startsWith('video') || /^(mp4|mov|m4v|avi|mkv|3gp)$/i.test(ext);
+        }
+
+        function isImageFile(file) {
+          const ext = getFileExt(file);
+          return (file.type || '').startsWith('image') || /^(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(ext);
+        }
+
         async function convertHeicToJpeg(file) {
           if (typeof heic2any === 'undefined') return file;
-          const ext = file.name.split('.').pop().toLowerCase();
-          if (ext !== 'heic' && ext !== 'heif' && file.type !== 'image/heic' && file.type !== 'image/heif') return file;
+          if (!isHeicFile(file)) return file;
           try {
             const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
             const jpegBlob = Array.isArray(blob) ? blob[0] : blob;
@@ -170,32 +208,90 @@
           }
         }
 
-        async function handleFileSelect(files) {
-          if (!files || files.length === 0) return;
-          const rawFiles = Array.from(files);
-          selectedFiles = [];
-          uploadBtn.disabled = true;
-          uploadBtn.textContent = '处理中...';
-          dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;"></div><div>正在处理 ${rawFiles.length} 个文件...</div>`;
+        // 在客户端压缩过大的照片，减少手机上传时间与流量
+        async function compressImageFile(file) {
+          if (isVideoFile(file)) return file;
+          const ext = getFileExt(file);
+          if (!isImageFile(file)) return file;
 
-          for (let i = 0; i < rawFiles.length; i++) {
-            const f = rawFiles[i];
-            const ext = f.name.split('.').pop().toLowerCase();
-            if (ext === 'heic' || ext === 'heif') {
-              dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">⏳</div><div>正在转换 HEIC 照片 (${i + 1}/${rawFiles.length})...</div>`;
-            }
-            const converted = await convertHeicToJpeg(f);
-            selectedFiles.push(converted);
+          // HEIC 先转换再压缩
+          let sourceFile = file;
+          if (isHeicFile(file)) {
+            sourceFile = await convertHeicToJpeg(file);
           }
 
-          updateFileList();
+          // 如果文件已经小于 1MB，跳过压缩
+          if (sourceFile.size <= 1024 * 1024) return sourceFile;
+
+          return new Promise((resolve) => {
+            const img = new Image();
+            const url = URL.createObjectURL(sourceFile);
+            img.onload = () => {
+              URL.revokeObjectURL(url);
+              const maxLongEdge = 1920;
+              let w = img.width;
+              let h = img.height;
+              if (w > h && w > maxLongEdge) {
+                h = Math.round(h * maxLongEdge / w);
+                w = maxLongEdge;
+              } else if (h > maxLongEdge) {
+                w = Math.round(w * maxLongEdge / h);
+                h = maxLongEdge;
+              } else {
+                // 尺寸不大，直接保留原文件
+                resolve(sourceFile);
+                return;
+              }
+
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, w, h);
+
+              const outType = sourceFile.type === 'image/png' ? 'image/png' : 'image/jpeg';
+              const quality = outType === 'image/png' ? undefined : 0.85;
+              canvas.toBlob((blob) => {
+                if (!blob) {
+                  resolve(sourceFile);
+                  return;
+                }
+                const newName = sourceFile.name.replace(/\.[^.]+$/, outType === 'image/png' ? '.png' : '.jpg');
+                resolve(new File([blob], newName, { type: outType }));
+              }, outType, quality);
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolve(sourceFile);
+            };
+            img.src = url;
+          });
+        }
+
+        async function handleFileSelect(files) {
+          if (!files || files.length === 0) return;
+          if (isUploading) return;
+
+          const rawFiles = Array.from(files);
+          // 过滤掉完全不支持的类型
+          const accepted = rawFiles.filter(f => isImageFile(f) || isVideoFile(f));
+          if (accepted.length === 0) {
+            dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">⚠️</div><div>没有可上传的照片或视频</div><div class="file-hint">请重新选择</div>`;
+            return;
+          }
+
+          selectedFiles = accepted.map(f => ({ file: f, status: '等待上传' }));
           uploadBtn.disabled = false;
           uploadBtn.textContent = `开始上传 (${selectedFiles.length} 个文件)`;
           dropText.innerHTML = `<div style="font-size:1.3rem;margin-bottom:0.3rem;">✅</div><div>已选择 ${selectedFiles.length} 个文件</div><div class="file-hint">点击可重新选择</div>`;
+          updateFileList();
+
+          // 重置 input，允许再次选择（部分手机浏览器需要）
+          fileInput.value = '';
         }
 
         fileInput.addEventListener('change', async (e) => {
-          const files = fileInput.files || (e && e.target && e.target.files);
+          const files = e && e.target && e.target.files;
           if (files && files.length > 0) {
             await handleFileSelect(files);
           }
@@ -233,22 +329,23 @@
           ]);
         }
 
-        async function uploadSingleFile(file, index, name, caption, date) {
-          const statusEl = document.getElementById(`fileStatus${index}`);
-          if (statusEl) {
-            statusEl.textContent = '上传中...';
-            statusEl.className = 'file-item-status uploading';
-          }
+        async function uploadSingleFile(item, index, name, caption, date) {
+          setFileStatus(index, '准备中...', 'uploading');
 
           try {
-            const fileType = file.type || '';
-            const isVideo = fileType.startsWith('video') || /\.(mp4|mov|m4v|avi|mkv)$/i.test(file.name);
-            const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_') || 'file';
+            // 1. 先压缩 / 转换（在手机上尤其重要）
+            setFileStatus(index, '处理中...', 'uploading');
+            const processedFile = await compressImageFile(item.file);
+
+            const fileType = processedFile.type || '';
+            const isVideo = isVideoFile(processedFile);
+            const safeName = processedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_') || 'file';
             const mediaId = generateId();
             const storagePath = `${mediaId}/${safeName}`;
             const contentType = fileType || (isVideo ? 'video/mp4' : 'image/jpeg');
 
-            // 1. 上传到 Storage
+            // 2. 上传到 Storage（手机网络不稳定，给 60 秒超时）
+            setFileStatus(index, '上传中...', 'uploading');
             const uploadResp = await fetchWithTimeout(`${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${storagePath}`, {
               method: 'POST',
               headers: {
@@ -257,15 +354,15 @@
                 'Content-Type': contentType,
                 'x-upsert': 'false'
               },
-              body: file
-            }, 30000);
+              body: processedFile
+            }, 60000);
 
             if (!uploadResp.ok) {
               const errText = await readTextWithTimeout(uploadResp).catch(() => '');
               throw new Error(`Storage 上传失败 (${uploadResp.status}): ${errText}`);
             }
 
-            // 2. 写入 media 表
+            // 3. 写入 media 表
             const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storagePath}`;
             const dbResp = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/media`, {
               method: 'POST',
@@ -282,52 +379,91 @@
                 uploader: name,
                 date,
                 storage_path: storagePath,
-                file_name: file.name,
+                file_name: item.file.name,
                 public_url: publicUrl
               })
-            }, 15000);
+            }, 30000);
 
             if (!dbResp.ok) {
               const dbErrText = await readTextWithTimeout(dbResp).catch(() => '');
               throw new Error(`media 表写入失败 (${dbResp.status}): ${dbErrText}`);
             }
 
-            if (statusEl) {
-              statusEl.textContent = '✓ 完成';
-              statusEl.className = 'file-item-status success';
-            }
+            setFileStatus(index, '✓ 完成', 'success');
+            item.status = '✓ 完成';
             return true;
           } catch (err) {
-            console.error(`文件 ${file.name} 上传失败`, err);
-            if (statusEl) {
-              statusEl.textContent = '✗ 失败';
-              statusEl.className = 'file-item-status error';
-            }
+            console.error(`文件 ${item.file.name} 上传失败`, err);
+            setFileStatus(index, '✗ 失败', 'error');
+            item.status = '✗ 失败';
+            item.error = err.message || '上传失败';
             return false;
           }
         }
 
-        uploadBtn.addEventListener('click', async () => {
-          if (selectedFiles.length === 0) return;
+        // 限制并发数，避免手机浏览器同时发起过多请求被限制或内存压力过大
+        async function runWithConcurrency(tasks, concurrency) {
+          const results = new Array(tasks.length);
+          let nextIndex = 0;
 
+          async function worker() {
+            while (nextIndex < tasks.length) {
+              const currentIndex = nextIndex++;
+              results[currentIndex] = await tasks[currentIndex]();
+            }
+          }
+
+          const workers = [];
+          for (let i = 0; i < Math.min(concurrency, tasks.length); i++) {
+            workers.push(worker());
+          }
+
+          await Promise.all(workers);
+          return results;
+        }
+
+        function updateOverallProgress(done, total) {
+          overallProgress.textContent = `正在上传：${done} / ${total} 个文件完成`;
+          overallProgress.classList.add('show');
+        }
+
+        uploadBtn.addEventListener('click', async () => {
+          if (selectedFiles.length === 0 || isUploading) return;
+
+          isUploading = true;
           uploadBtn.disabled = true;
           uploadBtn.textContent = '上传中...';
           uploadSummary.classList.remove('show');
+          overallProgress.classList.add('show');
 
           const name = uploaderName.value.trim() || '某个想他的人';
           const caption = memoryCaption.value.trim();
           const date = memoryDate.value || new Date().toISOString().slice(0, 10);
 
-          let successCount = 0;
-          let failCount = 0;
+          const total = selectedFiles.length;
+          let doneCount = 0;
 
-          for (let i = 0; i < selectedFiles.length; i++) {
-            const success = await uploadSingleFile(selectedFiles[i], i, name, caption, date);
-            if (success) successCount++;
-            else failCount++;
-          }
+          const tasks = selectedFiles.map((item, index) => async () => {
+            // 失败后自动重试一次
+            let success = await uploadSingleFile(item, index, name, caption, date);
+            if (!success) {
+              setFileStatus(index, '重试中...', 'uploading');
+              await new Promise(r => setTimeout(r, 800));
+              success = await uploadSingleFile(item, index, name, caption, date);
+            }
+            doneCount++;
+            updateOverallProgress(doneCount, total);
+            return success;
+          });
 
-          // 显示总结
+          // 手机上同时跑 2 个任务，兼顾速度与稳定性
+          const concurrency = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) ? 2 : 3;
+          const results = await runWithConcurrency(tasks, concurrency);
+
+          const successCount = results.filter(r => r).length;
+          const failCount = total - successCount;
+
+          overallProgress.classList.remove('show');
           uploadSummary.innerHTML = `
             <strong>上传完成</strong><br>
             成功：${successCount} 个<br>
@@ -340,6 +476,7 @@
               window.location.href = 'gallery.html';
             }, 1500);
           } else {
+            isUploading = false;
             uploadBtn.disabled = false;
             uploadBtn.textContent = '重新上传失败的';
             // 只保留失败的文件
@@ -347,6 +484,8 @@
               const statusEl = document.getElementById(`fileStatus${index}`);
               return statusEl && statusEl.classList.contains('error');
             });
+            // 重置 status，便于重试
+            selectedFiles.forEach(item => { item.status = '等待上传'; item.error = null; });
             updateFileList();
           }
         });
