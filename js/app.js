@@ -232,12 +232,12 @@ async function renderGallery(container, options = {}) {
     return;
   }
 
-  displayMetas.forEach((meta, i) => {
+  for (let i = 0; i < displayMetas.length; i++) {
+    const meta = displayMetas[i];
     const cardOptions = limit ? { index: i + 1, total: displayMetas.length } : {};
-    createPolaroidCard(meta, cardOptions).then(card => {
-      if (card) container.appendChild(card);
-    });
-  });
+    const card = await createPolaroidCard(meta, cardOptions);
+    if (card) container.appendChild(card);
+  }
 }
 
 // 灯箱
