@@ -172,8 +172,9 @@ async function handleHeicImage(imgEl, url) {
   }
 }
 
-async function createPolaroidCard(meta) {
+async function createPolaroidCard(meta, options = {}) {
   const comments = await fetchComments(meta.id);
+  const { index, total } = options;
 
   const card = document.createElement('div');
   card.className = 'polaroid';
@@ -188,8 +189,11 @@ async function createPolaroidCard(meta) {
     mediaHTML = `<img class="polaroid-media" src="${meta.public_url}" alt="${escapeHtml(meta.caption || 'Winston 的回忆')}" loading="lazy"${heicAttr} />`;
   }
 
+  const indexBadge = index ? `<div class="polaroid-index">${index}${total ? `/${total}` : ''}</div>` : '';
+
   card.innerHTML = `
     ${mediaHTML}
+    ${indexBadge}
     <div class="select-check" data-media-id="${meta.id}">✓</div>
     <div class="polaroid-caption">${escapeHtml(meta.caption) || '一个没写下什么的瞬间'}</div>
     <div class="polaroid-meta">
@@ -228,10 +232,12 @@ async function renderGallery(container, options = {}) {
     return;
   }
 
-  for (const meta of displayMetas) {
-    const card = await createPolaroidCard(meta);
-    if (card) container.appendChild(card);
-  }
+  displayMetas.forEach((meta, i) => {
+    const cardOptions = limit ? { index: i + 1, total: displayMetas.length } : {};
+    createPolaroidCard(meta, cardOptions).then(card => {
+      if (card) container.appendChild(card);
+    });
+  });
 }
 
 // 灯箱
