@@ -594,6 +594,20 @@ textarea { min-height: 100px; resize: vertical; }
   color: var(--ink-light);
 }
 
+.polaroid-index {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  background: rgba(61, 52, 41, 0.78);
+  color: #f9f5e9;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .empty-state {
   text-align: center;
   padding: 4rem 1rem;
